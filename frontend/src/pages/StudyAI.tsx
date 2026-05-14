@@ -2,12 +2,51 @@ import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   MessageSquare, ClipboardList, Timer, AlertCircle, BarChart2, GraduationCap,
-  Loader2, Mic, MicOff, Send, Volume2, VolumeX,
+  Loader2, Mic, MicOff, Send, Volume2, VolumeX, CheckCircle, XCircle,
+  ChevronRight, RefreshCw, FolderOpen,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { materialsApi, qaApi } from '../services/api';
-import { StudyMaterial } from '../types';
+import { materialsApi, mockTestsApi, qaApi, quizzesApi } from '../services/api';
+import { QuizQuestion, StudyMaterial } from '../types';
 import { cn } from '../lib/utils';
+
+function Btn({
+  children,
+  onClick,
+  disabled,
+  variant = 'primary',
+  className = '',
+}: {
+  children: React.ReactNode;
+  onClick?: () => void;
+  disabled?: boolean;
+  variant?: 'primary' | 'outline';
+  className?: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(
+        'inline-flex items-center gap-1.5 h-9 px-4 text-[13px] font-semibold rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed',
+        variant === 'primary'
+          ? 'bg-[#6DEB74] hover:bg-[#52e05a] text-gray-900'
+          : 'border border-gray-200 bg-white hover:bg-gray-50 text-gray-700',
+        className
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+function ScoreTag({ score }: { score: number }) {
+  const cls =
+    score >= 70 ? 'text-green-700 bg-green-50' :
+    score >= 40 ? 'text-orange-600 bg-orange-50' :
+    'text-red-600 bg-red-50';
+  return <span className={cn('text-[11.5px] font-semibold px-2 py-0.5 rounded-md', cls)}>{score}%</span>;
+}
 
 function EmptyState({
   icon: Icon,
@@ -51,17 +90,332 @@ function AnalysisPanel() {
 }
 
 function QuizPanel({ materials }: { materials: StudyMaterial[] }) {
+  const [view, setView] = useState<'list' | 'generate' | 'attempt' | 'results'>('list');
+  const [quizzes, setQuizzes] = useState<Array<{
+    id: number;
+    title: string;
+    quiz_type: string;
+    questions_count: number;
+    best_score: number;
+  }>>([]);
+  const [genData, setGenData] = useState({ material_id: 0, title: 'Practice Quiz', quiz_type: 'mcq', count: 10 });
+  const [generating, setGenerating] = useState(false);
+  const [currentQuiz, setCurrentQuiz] = useState<{
+    id: number;
+    title: string;
+    questions?: QuizQuestion[];
+  } | null>(null);
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [results, setResults] = useState<{
+    score: number;
+    correct: number;
+    total: number;
+    weak_topics?: string[];
+    detailed_results?: Array<{
+      question: string;
+      user_answer?: string;
+      correct_answer: string;
+      is_correct: boolean;
+      explanation?: string;
+    }>;
+  } | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [startTime] = useState<number>(Date.now());
   const ready = materials.filter((m) => m.processing_status === 'completed');
+  const loadQuizzes = () => {
+    quizzesApi.list().then((res) => setQuizzes(res.data)).catch(() => {});
+  };
+
+  useEffect(() => {
+    loadQuizzes();
+  }, []);
+
+  const generate = async () => {
+    if (!genData.material_id) {
+      setError('Select a material');
+      return;
+    }
+
+    setError('');
+    setGenerating(true);
+
+    try {
+      const res = await quizzesApi.generate(genData);
+      loadQuizzes();
+      setView('list');
+      toast.success(`Quiz generated — ${res.data.questions_count} questions ready`);
+    } catch (fetchError: unknown) {
+      const detail =
+        typeof fetchError === 'object' &&
+        fetchError !== null &&
+        'response' in fetchError &&
+        typeof (fetchError as { response?: { data?: { detail?: string } } }).response?.data?.detail === 'string'
+          ? (fetchError as { response?: { data?: { detail?: string } } }).response?.data?.detail
+          : 'Generation failed';
+      setError(detail);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const startQuiz = async (id: number) => {
+    const res = await quizzesApi.get(id);
+    setCurrentQuiz(res.data);
+    setAnswers({});
+    setResults(null);
+    setView('attempt');
+  };
+
+  const submitQuiz = async () => {
+    if (!currentQuiz) return;
+    setSubmitting(true);
+
+    try {
+      const timeTaken = Math.floor((Date.now() - startTime) / 1000);
+      const res = await quizzesApi.submit(currentQuiz.id, answers, timeTaken);
+      setResults(res.data);
+      setView('results');
+      loadQuizzes();
+    } catch (submitError: unknown) {
+      const detail =
+        typeof submitError === 'object' &&
+        submitError !== null &&
+        'response' in submitError &&
+        typeof (submitError as { response?: { data?: { detail?: string } } }).response?.data?.detail === 'string'
+          ? (submitError as { response?: { data?: { detail?: string } } }).response?.data?.detail
+          : 'Submit failed';
+      setError(detail);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (view === 'results' && results) {
+    const scoreColor = results.score >= 70 ? '#16a34a' : results.score >= 40 ? '#ea580c' : '#dc2626';
+
+    return (
+      <div className="overflow-y-auto h-full w-full">
+        <div className="p-5 space-y-3">
+          <div className="bg-white rounded-xl border border-gray-100 p-6 text-center">
+            <p className="text-5xl font-bold" style={{ color: scoreColor }}>{results.score}%</p>
+            <p className="text-[13px] text-gray-400 mt-1">{results.correct} / {results.total} correct</p>
+            <div className="mt-3 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+              <div className="h-full rounded-full" style={{ width: `${results.score}%`, backgroundColor: scoreColor }} />
+            </div>
+            {results.weak_topics && results.weak_topics.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-1.5 justify-center">
+                {results.weak_topics.slice(0, 4).map((topic) => (
+                  <span key={topic} className="text-[11.5px] text-gray-500 bg-gray-100 px-2 py-0.5 rounded-md">{topic}</span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            {results.detailed_results?.map((result, index) => (
+              <div key={index} className="bg-white rounded-xl border border-gray-100 px-4 py-3 flex items-start gap-3">
+                {result.is_correct
+                  ? <CheckCircle size={14} className="text-green-500 flex-shrink-0 mt-0.5" />
+                  : <XCircle size={14} className="text-red-400 flex-shrink-0 mt-0.5" />}
+                <div>
+                  <p className="text-[13px] font-medium text-gray-900">{result.question}</p>
+                  {!result.is_correct && <p className="text-[12px] text-red-500 mt-0.5">Your answer: {result.user_answer || '—'}</p>}
+                  <p className="text-[12px] text-gray-500 mt-0.5">Correct: {result.correct_answer}</p>
+                  {result.explanation && <p className="text-[11.5px] text-gray-400 italic mt-0.5">{result.explanation}</p>}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex gap-2">
+            <Btn onClick={() => { setView('list'); loadQuizzes(); }}>Back to quizzes</Btn>
+            <Btn variant="outline" onClick={() => { if (currentQuiz) void startQuiz(currentQuiz.id); }}>Retry</Btn>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (view === 'attempt' && currentQuiz) {
+    const answered = Object.keys(answers).length;
+    const total = currentQuiz.questions?.length || 0;
+
+    return (
+      <div className="overflow-y-auto h-full w-full">
+        <div className="p-5">
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <p className="font-semibold text-gray-900 text-[14px]">{currentQuiz.title}</p>
+              <p className="text-[12px] text-gray-400 mt-0.5">{answered} / {total} answered</p>
+            </div>
+            <div className="h-1.5 w-24 bg-gray-100 rounded-full overflow-hidden">
+              <div className="h-full bg-[#6DEB74] rounded-full" style={{ width: `${(answered / Math.max(total, 1)) * 100}%` }} />
+            </div>
+          </div>
+
+          {error && <p className="text-[12.5px] text-red-500 mb-4">{error}</p>}
+
+          <div className="space-y-3">
+            {currentQuiz.questions?.map((question, index) => (
+              <div key={index} className="bg-white rounded-xl border border-gray-100 p-4">
+                <div className="flex items-start gap-3 mb-3">
+                  <span className="w-6 h-6 bg-gray-100 text-gray-500 rounded-full flex items-center justify-center text-[11px] font-semibold flex-shrink-0">{index + 1}</span>
+                  <p className="text-[13.5px] font-medium text-gray-900">{question.question}</p>
+                </div>
+
+                {question.options ? (
+                  <div className="space-y-2 ml-9">
+                    {question.options.map((option, optionIndex) => {
+                      const letter = option.charAt(0);
+                      const selected = answers[String(index)] === letter;
+
+                      return (
+                        <button
+                          key={optionIndex}
+                          onClick={() => setAnswers((prev) => ({ ...prev, [String(index)]: letter }))}
+                          className={cn(
+                            'w-full text-left px-3 py-2 rounded-lg border text-[13px] transition-all',
+                            selected
+                              ? 'border-gray-900 bg-gray-900 text-white font-medium'
+                              : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50 text-gray-700'
+                          )}
+                        >
+                          {option}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <input
+                    type="text"
+                    className="ml-9 w-[calc(100%-2.25rem)] px-3 py-2 rounded-lg border border-gray-200 text-[13px] bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-300 transition"
+                    placeholder="Your answer..."
+                    value={answers[String(index)] || ''}
+                    onChange={(e) => setAnswers((prev) => ({ ...prev, [String(index)]: e.target.value }))}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="flex gap-2 mt-5">
+            <Btn onClick={() => void submitQuiz()} disabled={submitting}>
+              {submitting ? <><Loader2 size={13} className="animate-spin" />Submitting...</> : <><CheckCircle size={13} />Submit</>}
+            </Btn>
+            <Btn variant="outline" onClick={() => setView('list')}>Cancel</Btn>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (view === 'generate') {
+    return (
+      <div className="overflow-y-auto h-full w-full">
+        <div className="p-5">
+          <p className="font-semibold text-gray-900 text-[14px] mb-5">Generate Quiz</p>
+          {error && <p className="text-[12.5px] text-red-500 mb-3">{error}</p>}
+
+          <div className="bg-white rounded-xl border border-gray-100 p-5 space-y-4">
+            <div>
+              <label className="block text-[12px] font-medium text-gray-500 mb-1.5 uppercase tracking-wide">Material</label>
+              <select
+                value={String(genData.material_id || '')}
+                onChange={(e) => setGenData({ ...genData, material_id: Number(e.target.value) })}
+                className="w-full h-9 text-[13px] bg-gray-50 border border-gray-200 rounded-lg px-3 text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-200"
+              >
+                <option value="">Select...</option>
+                {ready.map((material) => (
+                  <option key={material.id} value={String(material.id)}>{material.original_name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[12px] font-medium text-gray-500 mb-1.5 uppercase tracking-wide">Title</label>
+              <input
+                type="text"
+                value={genData.title}
+                onChange={(e) => setGenData({ ...genData, title: e.target.value })}
+                className="w-full h-9 px-3 rounded-lg border border-gray-200 bg-gray-50 text-[13px] text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-200 transition"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-[12px] font-medium text-gray-500 mb-1.5 uppercase tracking-wide">Type</label>
+                <select
+                  value={genData.quiz_type}
+                  onChange={(e) => setGenData({ ...genData, quiz_type: e.target.value })}
+                  className="w-full h-9 text-[13px] bg-gray-50 border border-gray-200 rounded-lg px-3 text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-200"
+                >
+                  <option value="mcq">Multiple choice</option>
+                  <option value="short_answer">Short answer</option>
+                  <option value="mixed">Mixed</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[12px] font-medium text-gray-500 mb-1.5 uppercase tracking-wide">Questions</label>
+                <input
+                  type="number"
+                  min={5}
+                  max={20}
+                  value={genData.count}
+                  onChange={(e) => setGenData({ ...genData, count: Number(e.target.value) })}
+                  className="w-full h-9 px-3 rounded-lg border border-gray-200 bg-gray-50 text-[13px] text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-200 transition"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <Btn onClick={() => void generate()} disabled={generating} className="flex-1 justify-center">
+                {generating ? <><Loader2 size={13} className="animate-spin" />Generating...</> : <><RefreshCw size={13} />Generate</>}
+              </Btn>
+              <Btn variant="outline" onClick={() => setView('list')}>Cancel</Btn>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="overflow-y-auto h-full w-full">
       <div className="p-5">
+        <div className="flex items-center justify-between mb-4">
+          <p className="font-semibold text-gray-900 text-[14px]">Quizzes</p>
+          <Btn onClick={() => setView('generate')} disabled={ready.length === 0}>
+            <ClipboardList size={12} />New Quiz
+          </Btn>
+        </div>
+
         {ready.length === 0 && <NoMaterialsBanner />}
-        <EmptyState
-          icon={ClipboardList}
-          title="Quiz workspace prepared"
-          sub="Simple quiz generation and attempt views will be added here for processed materials"
-        />
+        {quizzes.length === 0 ? (
+          <EmptyState
+            icon={FolderOpen}
+            title="No quizzes yet"
+            sub="Generate a quiz from your processed materials to start practicing"
+          />
+        ) : (
+          <div className="space-y-2">
+            {quizzes.map((quiz) => (
+              <div key={quiz.id} className="bg-white rounded-xl border border-gray-100 px-4 py-3.5 flex items-center">
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-[13.5px] text-gray-900 truncate">{quiz.title}</p>
+                  <p className="text-[11.5px] text-gray-400 mt-0.5">
+                    {quiz.quiz_type} · {quiz.questions_count} questions
+                    {quiz.best_score > 0 && <> · <ScoreTag score={quiz.best_score} /></>}
+                  </p>
+                </div>
+                <Btn variant="outline" onClick={() => void startQuiz(quiz.id)}>
+                  Start <ChevronRight size={12} />
+                </Btn>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
