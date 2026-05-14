@@ -422,17 +422,380 @@ function QuizPanel({ materials }: { materials: StudyMaterial[] }) {
 }
 
 function MockPanel({ materials }: { materials: StudyMaterial[] }) {
+  const [view, setView] = useState<'list' | 'create' | 'attempt' | 'results'>('list');
+  const [mocks, setMocks] = useState<Array<{
+    id: number;
+    title: string;
+    questions_count: number;
+    time_limit: number;
+    best_score: number;
+  }>>([]);
+  const [selectedMats, setSelectedMats] = useState<number[]>([]);
+  const [cfg, setCfg] = useState({ title: 'Mock Test', questions_count: 10, time_limit: 30 });
+  const [creating, setCreating] = useState(false);
+  const [currentMock, setCurrentMock] = useState<{
+    id: number;
+    title: string;
+    time_limit: number;
+    questions?: Array<{
+      question: string;
+      options?: string[];
+    }>;
+  } | null>(null);
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [results, setResults] = useState<{
+    score: number;
+    correct: number;
+    total: number;
+    readiness?: {
+      readiness_score: number;
+      readiness_level: string;
+      recommendation: string;
+    };
+    detailed_results?: Array<{
+      question: string;
+      user_answer?: string;
+      correct_answer: string;
+      is_correct: boolean;
+      explanation?: string;
+    }>;
+  } | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [timeLeft, setTimeLeft] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const ready = materials.filter((m) => m.processing_status === 'completed');
+  const loadMocks = () => {
+    mockTestsApi.list().then((res) => setMocks(res.data)).catch(() => {});
+  };
+
+  useEffect(() => {
+    loadMocks();
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
+
+  const create = async () => {
+    if (selectedMats.length === 0) {
+      setError('Select at least one material');
+      return;
+    }
+
+    setError('');
+    setCreating(true);
+
+    try {
+      const res = await mockTestsApi.create({
+        title: cfg.title,
+        material_ids: selectedMats,
+        questions_count: cfg.questions_count,
+        time_limit: cfg.time_limit,
+      });
+      loadMocks();
+      setView('list');
+      toast.success(`Mock test created — ${res.data.questions_count} questions ready`);
+    } catch (createError: unknown) {
+      const detail =
+        typeof createError === 'object' &&
+        createError !== null &&
+        'response' in createError &&
+        typeof (createError as { response?: { data?: { detail?: string } } }).response?.data?.detail === 'string'
+          ? (createError as { response?: { data?: { detail?: string } } }).response?.data?.detail
+          : 'Creation failed';
+      setError(detail);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const startMock = async (id: number) => {
+    const res = await mockTestsApi.get(id);
+    setCurrentMock(res.data);
+    setAnswers({});
+    setResults(null);
+    setView('attempt');
+    setTimeLeft((res.data.time_limit || 30) * 60);
+
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          if (timerRef.current) clearInterval(timerRef.current);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  const submitMock = async () => {
+    if (!currentMock) return;
+    setSubmitting(true);
+
+    try {
+      const timeTaken = Math.max(((currentMock.time_limit || 30) * 60) - timeLeft, 0);
+      const res = await mockTestsApi.submit(currentMock.id, answers, timeTaken);
+      if (timerRef.current) clearInterval(timerRef.current);
+      setResults(res.data);
+      setView('results');
+      loadMocks();
+    } catch (submitError: unknown) {
+      const detail =
+        typeof submitError === 'object' &&
+        submitError !== null &&
+        'response' in submitError &&
+        typeof (submitError as { response?: { data?: { detail?: string } } }).response?.data?.detail === 'string'
+          ? (submitError as { response?: { data?: { detail?: string } } }).response?.data?.detail
+          : 'Submit failed';
+      setError(detail);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
+    const secs = (seconds % 60).toString().padStart(2, '0');
+    return `${mins}:${secs}`;
+  };
+
+  if (view === 'results' && results) {
+    const scoreColor = results.score >= 70 ? '#16a34a' : results.score >= 40 ? '#ea580c' : '#dc2626';
+
+    return (
+      <div className="overflow-y-auto h-full w-full">
+        <div className="p-5 space-y-3">
+          <div className="bg-white rounded-xl border border-gray-100 p-6 text-center">
+            <p className="text-5xl font-bold" style={{ color: scoreColor }}>{results.score}%</p>
+            <p className="text-[13px] text-gray-400 mt-1">{results.correct} / {results.total} correct</p>
+            <div className="mt-3 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+              <div className="h-full rounded-full" style={{ width: `${results.score}%`, backgroundColor: scoreColor }} />
+            </div>
+            {results.readiness && (
+              <div className="mt-4 pt-4 border-t border-gray-100 text-left">
+                <p className="text-[12.5px] font-semibold text-gray-700">
+                  Readiness: {results.readiness.readiness_score}% — {results.readiness.readiness_level}
+                </p>
+                <p className="text-[12px] text-gray-400 mt-0.5">{results.readiness.recommendation}</p>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            {results.detailed_results?.slice(0, 8).map((result, index) => (
+              <div key={index} className="bg-white rounded-xl border border-gray-100 px-4 py-3 flex items-start gap-3">
+                {result.is_correct
+                  ? <CheckCircle size={14} className="text-green-500 flex-shrink-0 mt-0.5" />
+                  : <XCircle size={14} className="text-red-400 flex-shrink-0 mt-0.5" />}
+                <div>
+                  <p className="text-[13px] font-medium text-gray-900">{result.question}</p>
+                  {!result.is_correct && <p className="text-[12px] text-red-500 mt-0.5">Your: {result.user_answer || '—'}</p>}
+                  <p className="text-[12px] text-gray-500 mt-0.5">Correct: {result.correct_answer}</p>
+                  {result.explanation && <p className="text-[11.5px] text-gray-400 italic mt-0.5">{result.explanation}</p>}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <Btn onClick={() => { setView('list'); loadMocks(); }}>Back to mock tests</Btn>
+        </div>
+      </div>
+    );
+  }
+
+  if (view === 'attempt' && currentMock) {
+    const answered = Object.keys(answers).length;
+    const total = currentMock.questions?.length || 0;
+    const isWarning = timeLeft <= 300;
+
+    return (
+      <div className="overflow-y-auto h-full w-full">
+        <div className="p-5">
+          <div className="sticky top-0 bg-[#F7F8FA]/95 backdrop-blur-sm -mx-5 px-5 py-3 mb-5 border-b border-gray-100 flex items-center justify-between z-10">
+            <div>
+              <p className="font-semibold text-gray-900 text-[13.5px]">{currentMock.title}</p>
+              <p className="text-[11.5px] text-gray-400">{answered} / {total} answered</p>
+            </div>
+            <div className={cn(
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-mono font-bold text-[13px] border',
+              isWarning ? 'bg-red-50 text-red-600 border-red-200' : 'bg-white text-gray-800 border-gray-200'
+            )}>
+              <Timer size={12} />
+              {formatTime(timeLeft)}
+            </div>
+          </div>
+
+          {error && <p className="text-[12.5px] text-red-500 mb-4">{error}</p>}
+
+          <div className="space-y-3">
+            {currentMock.questions?.map((question, index) => (
+              <div key={index} className="bg-white rounded-xl border border-gray-100 p-4">
+                <div className="flex items-start gap-3 mb-3">
+                  <span className="w-6 h-6 bg-gray-100 text-gray-500 rounded-full flex items-center justify-center text-[11px] font-semibold flex-shrink-0">{index + 1}</span>
+                  <p className="text-[13.5px] font-medium text-gray-900">{question.question}</p>
+                </div>
+
+                {question.options ? (
+                  <div className="space-y-2 ml-9">
+                    {question.options.map((option, optionIndex) => {
+                      const letter = option.charAt(0);
+                      const selected = answers[String(index)] === letter;
+
+                      return (
+                        <button
+                          key={optionIndex}
+                          onClick={() => setAnswers((prev) => ({ ...prev, [String(index)]: letter }))}
+                          className={cn(
+                            'w-full text-left px-3 py-2 rounded-lg border text-[13px] transition-all',
+                            selected
+                              ? 'border-gray-900 bg-gray-900 text-white font-medium'
+                              : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50 text-gray-700'
+                          )}
+                        >
+                          {option}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <input
+                    type="text"
+                    className="ml-9 w-[calc(100%-2.25rem)] px-3 py-2 rounded-lg border border-gray-200 text-[13px] bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-200"
+                    placeholder="Your answer..."
+                    value={answers[String(index)] || ''}
+                    onChange={(e) => setAnswers((prev) => ({ ...prev, [String(index)]: e.target.value }))}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="flex gap-2 mt-5">
+            <Btn onClick={() => void submitMock()} disabled={submitting}>
+              {submitting ? <><Loader2 size={13} className="animate-spin" />Submitting...</> : 'Submit Mock Test'}
+            </Btn>
+            <Btn variant="outline" onClick={() => { if (timerRef.current) clearInterval(timerRef.current); setView('list'); }}>Cancel</Btn>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (view === 'create') {
+    return (
+      <div className="overflow-y-auto h-full w-full">
+        <div className="p-5">
+          <p className="font-semibold text-gray-900 text-[14px] mb-5">Create Mock Test</p>
+          {error && <p className="text-[12.5px] text-red-500 mb-3">{error}</p>}
+
+          <div className="bg-white rounded-xl border border-gray-100 p-5 space-y-4">
+            <div>
+              <label className="block text-[12px] font-medium text-gray-500 mb-1.5 uppercase tracking-wide">Title</label>
+              <input
+                type="text"
+                value={cfg.title}
+                onChange={(e) => setCfg({ ...cfg, title: e.target.value })}
+                className="w-full h-9 px-3 rounded-lg border border-gray-200 bg-gray-50 text-[13px] text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-200 transition"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[12px] font-medium text-gray-500 mb-2 uppercase tracking-wide">Materials</label>
+              <div className="space-y-2">
+                {ready.map((material) => (
+                  <label key={material.id} className="flex items-center gap-3 p-2.5 rounded-lg border border-gray-100 hover:bg-gray-50 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedMats.includes(material.id)}
+                      onChange={(e) =>
+                        setSelectedMats(
+                          e.target.checked
+                            ? [...selectedMats, material.id]
+                            : selectedMats.filter((id) => id !== material.id)
+                        )
+                      }
+                      className="accent-gray-800 w-4 h-4"
+                    />
+                    <span className="text-[13px] text-gray-700 truncate">{material.original_name}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[12px] font-medium text-gray-500 mb-1.5 uppercase tracking-wide">
+                Questions — <strong className="text-gray-900">{cfg.questions_count}</strong>
+              </label>
+              <input
+                type="range"
+                min={5}
+                max={20}
+                step={1}
+                value={cfg.questions_count}
+                onChange={(e) => setCfg({ ...cfg, questions_count: Number(e.target.value) })}
+                className="w-full accent-gray-800"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[12px] font-medium text-gray-500 mb-1.5 uppercase tracking-wide">
+                Time limit — <strong className="text-gray-900">{cfg.time_limit} min</strong>
+              </label>
+              <input
+                type="range"
+                min={10}
+                max={90}
+                step={5}
+                value={cfg.time_limit}
+                onChange={(e) => setCfg({ ...cfg, time_limit: Number(e.target.value) })}
+                className="w-full accent-gray-800"
+              />
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <Btn onClick={() => void create()} disabled={creating} className="flex-1 justify-center">
+                {creating ? <><Loader2 size={13} className="animate-spin" />Creating...</> : <><Timer size={13} />Create</>}
+              </Btn>
+              <Btn variant="outline" onClick={() => setView('list')}>Cancel</Btn>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="overflow-y-auto h-full w-full">
       <div className="p-5">
+        <div className="flex items-center justify-between mb-4">
+          <p className="font-semibold text-gray-900 text-[14px]">Mock Tests</p>
+          <Btn onClick={() => setView('create')} disabled={ready.length === 0}>
+            <Timer size={12} />New Mock Test
+          </Btn>
+        </div>
+
         {ready.length === 0 && <NoMaterialsBanner />}
-        <EmptyState
-          icon={Timer}
-          title="Mock test area prepared"
-          sub="Timed mock test creation, answering, and readiness summaries will live here"
-        />
+        {mocks.length === 0 ? (
+          <EmptyState icon={Timer} title="No mock tests yet" sub="Create a timed exam from your processed materials" />
+        ) : (
+          <div className="space-y-2">
+            {mocks.map((mock) => (
+              <div key={mock.id} className="bg-white rounded-xl border border-gray-100 px-4 py-3.5 flex items-center">
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-[13.5px] text-gray-900 truncate">{mock.title}</p>
+                  <p className="text-[11.5px] text-gray-400 mt-0.5">
+                    {mock.time_limit} min · {mock.questions_count} questions
+                    {mock.best_score > 0 && <> · <ScoreTag score={mock.best_score} /></>}
+                  </p>
+                </div>
+                <Btn variant="outline" onClick={() => void startMock(mock.id)}>
+                  Start <ChevronRight size={12} />
+                </Btn>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
