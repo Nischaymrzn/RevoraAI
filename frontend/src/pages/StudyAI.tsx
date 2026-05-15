@@ -48,6 +48,14 @@ function ScoreTag({ score }: { score: number }) {
   return <span className={cn('text-[11.5px] font-semibold px-2 py-0.5 rounded-md', cls)}>{score}%</span>;
 }
 
+function Bar({ value }: { value: number }) {
+  return (
+    <div className="h-1 bg-gray-100 rounded-full overflow-hidden">
+      <div className="h-full bg-gray-300 rounded-full transition-all duration-500" style={{ width: `${Math.min(value, 100)}%` }} />
+    </div>
+  );
+}
+
 function EmptyState({
   icon: Icon,
   title,
@@ -76,14 +84,202 @@ function NoMaterialsBanner() {
 }
 
 function AnalysisPanel() {
+  const [matId, setMatId] = useState('');
+  const [analysis, setAnalysis] = useState<{
+    analysis_summary?: string;
+    main_topics?: Array<{
+      name: string;
+      exam_weight_estimate?: string;
+      importance: number;
+      frequency?: string;
+    }>;
+    likely_questions?: Array<{
+      question: string;
+      likelihood: number;
+      topic?: string;
+      type?: string;
+      marks?: number;
+    }>;
+    key_concepts?: string[];
+    revision_priority?: string[];
+  } | null>(null);
+  const [existing, setExisting] = useState<typeof analysis>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [materials, setMaterials] = useState<StudyMaterial[]>([]);
+  const ready = materials.filter((m) => m.processing_status === 'completed');
+
+  useEffect(() => {
+    materialsApi.list().then((res) => setMaterials(res.data)).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!matId) {
+      setExisting(null);
+      return;
+    }
+
+    qaApi.getPatternAnalysis(Number(matId)).then((res) => setExisting(res.data)).catch(() => {});
+  }, [matId]);
+
+  const run = async () => {
+    if (!matId) {
+      setError('Select a material');
+      return;
+    }
+
+    setError('');
+    setLoading(true);
+
+    try {
+      const res = await qaApi.analyzePatterns(Number(matId));
+      setAnalysis(res.data);
+    } catch (fetchError: unknown) {
+      const detail =
+        typeof fetchError === 'object' &&
+        fetchError !== null &&
+        'response' in fetchError &&
+        typeof (fetchError as { response?: { data?: { detail?: string } } }).response?.data?.detail === 'string'
+          ? (fetchError as { response?: { data?: { detail?: string } } }).response?.data?.detail
+          : 'Analysis failed';
+      setError(detail);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const data = analysis || existing;
+
   return (
     <div className="overflow-y-auto h-full w-full">
-      <div className="p-5">
-        <EmptyState
-          icon={BarChart2}
-          title="Analysis panel coming together"
-          sub="This workspace will show likely questions, topic weight, and exam pattern insights"
-        />
+      <div className="p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          {ready.length > 0 ? (
+            <select
+              value={matId}
+              onChange={(e) => { setMatId(e.target.value); setAnalysis(null); }}
+              className="h-8 text-[12.5px] bg-white border border-gray-200 rounded-lg px-3 max-w-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-200"
+            >
+              <option value="">Select a material...</option>
+              {ready.map((material) => (
+                <option key={material.id} value={String(material.id)}>
+                  {material.original_name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <p className="text-[12.5px] text-gray-400 flex items-center gap-1.5">
+              <FolderOpen size={13} />
+              No processed materials yet
+            </p>
+          )}
+
+          <Btn onClick={() => void run()} disabled={!matId || loading}>
+            {loading ? <><Loader2 size={12} className="animate-spin" />Analysing...</> : <><RefreshCw size={12} />Analyse</>}
+          </Btn>
+
+          {existing && !analysis && <span className="text-[11px] text-gray-400 ml-1">Previous results shown</span>}
+        </div>
+
+        {error && <p className="text-[12.5px] text-red-500">{error}</p>}
+
+        {loading && (
+          <div className="bg-white rounded-xl border border-gray-100 py-14 text-center">
+            <Loader2 size={24} className="text-gray-300 mx-auto mb-3 animate-spin" />
+            <p className="text-[13px] text-gray-400">Analysing patterns and exam trends...</p>
+          </div>
+        )}
+
+        {!data && !loading && (
+          <EmptyState
+            icon={BarChart2}
+            title="No analysis yet"
+            sub="Select a past paper or material and click Analyse to see exam patterns and likely questions"
+          />
+        )}
+
+        {data && !loading && (
+          <div className="space-y-4 fade-in">
+            {data.analysis_summary && (
+              <div className="bg-white rounded-xl border border-gray-100 p-5">
+                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Summary</p>
+                <p className="text-[13px] text-gray-700 leading-relaxed">{data.analysis_summary}</p>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {data.main_topics && data.main_topics.length > 0 && (
+                <div className="bg-white rounded-xl border border-gray-100 p-5">
+                  <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-4">Topic Coverage</p>
+                  <div className="space-y-4">
+                    {data.main_topics.map((topic, index) => (
+                      <div key={index}>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-[13px] font-medium text-gray-800">{topic.name}</span>
+                          <span className="text-[11px] text-gray-400">{topic.exam_weight_estimate}</span>
+                        </div>
+                        <Bar value={topic.importance} />
+                        {topic.frequency && (
+                          <p className="text-[11px] text-gray-400 mt-0.5 capitalize">{topic.frequency} frequency</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {data.likely_questions && data.likely_questions.length > 0 && (
+                <div className="bg-white rounded-xl border border-gray-100 p-5">
+                  <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-4">Likely Questions</p>
+                  <div className="space-y-3">
+                    {data.likely_questions.slice(0, 6).map((question, index) => (
+                      <div key={index} className="flex items-start gap-2.5 pb-3 border-b border-gray-50 last:border-0 last:pb-0">
+                        <span className="text-[11px] font-semibold text-gray-400 w-8 flex-shrink-0 mt-0.5">{question.likelihood}%</span>
+                        <div>
+                          <p className="text-[12.5px] text-gray-700 leading-snug">{question.question}</p>
+                          <p className="text-[11px] text-gray-400 mt-0.5 capitalize">
+                            {question.topic} · {question.type}{question.marks ? ` · ${question.marks}m` : ''}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {data.key_concepts && data.key_concepts.length > 0 && (
+                <div className="bg-white rounded-xl border border-gray-100 p-5">
+                  <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-3">Key Concepts</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {data.key_concepts.map((concept) => (
+                      <span key={concept} className="text-[12px] text-gray-600 bg-gray-50 border border-gray-200 px-2.5 py-0.5 rounded-md">
+                        {concept}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {data.revision_priority && data.revision_priority.length > 0 && (
+                <div className="bg-white rounded-xl border border-gray-100 p-5">
+                  <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-3">Revision Priority</p>
+                  <ol className="space-y-2">
+                    {data.revision_priority.map((priority, index) => (
+                      <li key={index} className="flex items-start gap-2.5 text-[12.5px] text-gray-700">
+                        <span className="w-5 h-5 bg-gray-100 text-gray-500 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 mt-0.5">
+                          {index + 1}
+                        </span>
+                        {priority}
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
