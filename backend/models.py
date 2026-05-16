@@ -16,16 +16,37 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     materials = relationship("StudyMaterial", back_populates="user", cascade="all, delete")
+    courses = relationship("Course", back_populates="user", cascade="all, delete")
     queries = relationship("QueryHistory", back_populates="user", cascade="all, delete")
     quizzes = relationship("Quiz", back_populates="user", cascade="all, delete")
     mock_tests = relationship("MockTest", back_populates="user", cascade="all, delete")
     activity_events = relationship("ActivityEvent", back_populates="user", cascade="all, delete")
 
 
+class Course(Base):
+    """
+    A course/subject the user is studying.
+    Past papers and lesson notes are linked to a course for organised retrieval.
+    """
+    __tablename__ = "courses"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    name = Column(String, nullable=False)           # "Computer Science"
+    code = Column(String, nullable=True)            # "CS232"
+    grade_level = Column(String, nullable=True)     # "Grade XII"
+    exam_board = Column(String, nullable=True)      # "NEB"
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User", back_populates="courses")
+    materials = relationship("StudyMaterial", back_populates="course")
+
+
 class StudyMaterial(Base):
     __tablename__ = "study_materials"
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    course_id = Column(Integer, ForeignKey("courses.id"), nullable=True)
     filename = Column(String, nullable=False)         # unique storage filename
     original_name = Column(String, nullable=False)    # original upload name
     file_type = Column(String, nullable=False)
@@ -41,14 +62,22 @@ class StudyMaterial(Base):
     # values: general | past_paper | lesson | notes | textbook
     material_type = Column(String, default="general")
 
+    # Auto-extracted metadata (populated by LLM after OCR)
+    exam_year = Column(Integer, nullable=True)         # 2022, 2023, 2024 …
+    exam_board = Column(String, nullable=True)         # NEB, Cambridge, CBSE …
+    grade_level = Column(String, nullable=True)        # Grade XII, A-Level …
+    subject = Column(String, nullable=True)            # Computer Science, Physics …
+
     # Permanent URL in Supabase Storage
     storage_url = Column(Text, nullable=True)
 
     user = relationship("User", back_populates="materials")
+    course = relationship("Course", back_populates="materials")
     chunks = relationship("MaterialChunk", back_populates="material", cascade="all, delete")
     queries = relationship("QueryHistory", back_populates="material")
     quizzes = relationship("Quiz", back_populates="material")
     pattern_analyses = relationship("PatternAnalysis", back_populates="material", cascade="all, delete")
+    paper_questions = relationship("PaperQuestion", back_populates="material", cascade="all, delete")
 
 
 class MaterialChunk(Base):
@@ -107,6 +136,7 @@ class QuizQuestion(Base):
     explanation = Column(Text, nullable=True)
     topic = Column(String, nullable=True)
     difficulty = Column(String, default="medium")
+    marks = Column(Integer, default=2, nullable=True)
 
     quiz = relationship("Quiz", back_populates="questions")
 
@@ -173,15 +203,53 @@ class MockTestAttempt(Base):
     mock_test = relationship("MockTest", back_populates="attempts")
 
 
+class PaperQuestion(Base):
+    """
+    Individual question extracted from a past exam paper.
+    Section (mcq/short_answer/long_answer), marks, chapter, topic all stored here.
+    Embedding enables cross-paper similarity search — the "underlining" feature.
+    """
+    __tablename__ = "paper_questions"
+    id = Column(Integer, primary_key=True, index=True)
+    material_id = Column(Integer, ForeignKey("study_materials.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    question_number = Column(Integer, nullable=True)
+    # Section type: mcq | short_answer | long_answer | unknown
+    section = Column(String, nullable=False, default="unknown")
+    question_text = Column(Text, nullable=False)
+    options = Column(JSON, nullable=True)          # A/B/C/D options for MCQ
+    marks = Column(Integer, nullable=True)
+    detected_chapter = Column(String, nullable=True)      # e.g. "Chapter 5: DBMS"
+    detected_topic = Column(String, nullable=True)        # e.g. "Normalization"
+    question_category = Column(String, nullable=True)     # code | theory | numerical | diagram | other
+    embedding = Column(Vector(EMBEDDING_DIMS), nullable=True)
+    extracted_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    material = relationship("StudyMaterial", back_populates="paper_questions")
+
+
 class PatternAnalysis(Base):
     __tablename__ = "pattern_analysis"
     id = Column(Integer, primary_key=True, index=True)
     material_id = Column(Integer, ForeignKey("study_materials.id"), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    course_id = Column(Integer, ForeignKey("courses.id"), nullable=True)
+    # JSON list of all material IDs included in this analysis
+    material_ids_json = Column(JSON, nullable=True)
+    is_past_paper_analysis = Column(Boolean, default=False)
     topics = Column(JSON, nullable=True)
     likely_questions = Column(JSON, nullable=True)
     analysis_text = Column(Text, nullable=True)
     topic_weights = Column(JSON, nullable=True)
+    # Full analysis result JSON (complete output from analyze_papers_rag)
+    full_result_json = Column(JSON, nullable=True)
+    # Question clusters — the "same question across papers" detection result
+    question_clusters_json = Column(JSON, nullable=True)
+    # Section-level breakdown (MCQ / short / long analysis)
+    section_breakdown_json = Column(JSON, nullable=True)
+    # Human-readable label for this analysis run
+    analysis_label = Column(String, nullable=True)
+    papers_analyzed = Column(JSON, nullable=True)  # [{name, year, id}]
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     material = relationship("StudyMaterial", back_populates="pattern_analyses")
