@@ -31,8 +31,9 @@ EMBEDDING_DIMS = 384
 
 # Groq (primary LLM — free, fast, works globally)
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_MODEL = "llama-3.1-8b-instant"      # fast, free, 131k context
-GROQ_MODEL_LARGE = "llama-3.3-70b-versatile"  # better quality for analysis
+GROQ_MODEL = "llama-3.1-8b-instant"             # fast, free, 131k context
+GROQ_MODEL_LARGE = "llama-3.3-70b-versatile"   # better quality for analysis
+GROQ_VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"  # vision / OCR
 
 # Gemini (kept as fallback, may not work in all regions)
 GEMINI_MODEL = "gemini-2.0-flash"

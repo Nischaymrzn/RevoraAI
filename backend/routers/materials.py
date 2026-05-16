@@ -30,11 +30,13 @@ def _process_material(material_id: int, temp_filepath: str, file_type: str, db_u
     """
     Background task: extract text → chunk → embed each chunk via Google API
     → store embeddings in PostgreSQL (pgvector).
+    For past papers, also auto-extracts exam metadata (year, board, subject, grade).
     Temp file is deleted at the end regardless of success/failure.
     """
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
     from services.vector_store import embed_text
+    from services.metadata_service import extract_paper_metadata
 
     engine = create_engine(db_url, pool_pre_ping=True)
     SessionLocal = sessionmaker(bind=engine)
@@ -51,6 +53,21 @@ def _process_material(material_id: int, temp_filepath: str, file_type: str, db_u
         text, page_count = extract_text_from_file(temp_filepath, file_type)
         chunks = chunk_text(text, CHUNK_SIZE, CHUNK_OVERLAP)
         word_count = len(text.split())
+
+        # Auto-extract metadata for past papers (and any material missing subject)
+        if material.material_type == "past_paper" or not material.subject:
+            print(f"[INFO] Extracting metadata for material {material_id}...")
+            meta = extract_paper_metadata(text)
+            # Only update fields that are still null — don't overwrite user-set values
+            if meta.get("exam_year") and not material.exam_year:
+                material.exam_year = meta["exam_year"]
+            if meta.get("exam_board") and not material.exam_board:
+                material.exam_board = meta["exam_board"]
+            if meta.get("grade_level") and not material.grade_level:
+                material.grade_level = meta["grade_level"]
+            if meta.get("subject") and not material.subject:
+                material.subject = meta["subject"]
+            print(f"[INFO] Metadata: year={material.exam_year} board={material.exam_board} subject={material.subject}")
 
         # Embed each chunk and store in DB with pgvector
         for i, chunk in enumerate(chunks):
@@ -69,6 +86,57 @@ def _process_material(material_id: int, temp_filepath: str, file_type: str, db_u
         material.chunk_count = len(chunks)
         material.word_count = word_count
         db.commit()
+
+        # ── Question extraction (past papers only) ────────────────────────────
+        # Extract individual questions and embed them for cross-paper clustering.
+        # This runs AFTER marking status=completed so the material is usable
+        # even if question extraction fails.
+        if material.material_type == "past_paper":
+            try:
+                from services.question_extractor import extract_questions, detect_chapters
+                print(f"[INFO] Extracting questions from past paper {material_id}...")
+
+                questions = extract_questions(
+                    text,
+                    subject=material.subject or "",
+                    grade_level=material.grade_level or "",
+                )
+
+                if questions:
+                    chapters = detect_chapters(
+                        questions,
+                        subject=material.subject or "",
+                        grade_level=material.grade_level or "",
+                    )
+
+                    for q in questions:
+                        qnum = q.get("question_number")
+                        chapter_info = chapters.get(qnum, {}) if qnum is not None else {}
+                        q_text = q.get("question_text", "").strip()
+                        if not q_text:
+                            continue
+
+                        q_embedding = embed_text(q_text)
+                        pq = models.PaperQuestion(
+                            material_id=material_id,
+                            user_id=user_id,
+                            question_number=qnum,
+                            section=q.get("section", "unknown"),
+                            question_text=q_text,
+                            options=q.get("options"),
+                            marks=q.get("marks"),
+                            detected_chapter=chapter_info.get("chapter") or q.get("detected_topic"),
+                            detected_topic=q.get("detected_topic"),
+                            question_category=q.get("question_category"),
+                            embedding=q_embedding,
+                        )
+                        db.add(pq)
+
+                    db.commit()
+                    print(f"[INFO] Stored {len(questions)} extracted questions for material {material_id}")
+            except Exception as qe:
+                print(f"[WARN] Question extraction failed for material {material_id}: {qe}")
+                # Don't re-raise — material is already marked completed
 
     except Exception as e:
         import traceback
@@ -94,6 +162,7 @@ def upload_material(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     material_type: str = Form(default="general"),
+    course_id: Optional[int] = Form(default=None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
@@ -105,6 +174,15 @@ def upload_material(
     # Validate material type
     if material_type not in VALID_MATERIAL_TYPES:
         material_type = "general"
+
+    # Validate course belongs to user (if provided)
+    if course_id is not None:
+        course = db.query(models.Course).filter(
+            models.Course.id == course_id,
+            models.Course.user_id == current_user.id,
+        ).first()
+        if not course:
+            raise HTTPException(status_code=404, detail="Course not found")
 
     # Read file content
     content = file.file.read()
@@ -124,6 +202,7 @@ def upload_material(
     # Create DB record
     material = models.StudyMaterial(
         user_id=current_user.id,
+        course_id=course_id,
         filename=unique_name,
         original_name=file.filename,
         file_type=ext,
@@ -142,13 +221,14 @@ def upload_material(
         _process_material, material.id, temp_path, ext, DATABASE_URL, current_user.id
     )
 
-    _log_activity(db, current_user.id, "upload", f"Uploaded {file.filename}", {"material_id": material.id})
+    _log_activity(db, current_user.id, "upload", f"Uploaded {file.filename}", {"material_id": material.id, "material_type": material_type, "course_id": course_id})
 
     return {
         "id": material.id,
         "original_name": material.original_name,
         "file_type": material.file_type,
         "material_type": material.material_type,
+        "course_id": material.course_id,
         "processing_status": material.processing_status,
         "message": "File uploaded. Processing started in background.",
     }
@@ -171,6 +251,11 @@ def list_materials(db: Session = Depends(get_db), current_user: models.User = De
             "upload_date": m.upload_date.isoformat() if m.upload_date else None,
             "processing_status": m.processing_status,
             "material_type": m.material_type,
+            "course_id": m.course_id,
+            "exam_year": m.exam_year,
+            "exam_board": m.exam_board,
+            "grade_level": m.grade_level,
+            "subject": m.subject,
             "page_count": m.page_count,
             "chunk_count": m.chunk_count,
             "word_count": m.word_count,
@@ -201,6 +286,11 @@ def get_material(material_id: int, db: Session = Depends(get_db), current_user: 
         "upload_date": m.upload_date.isoformat() if m.upload_date else None,
         "processing_status": m.processing_status,
         "material_type": m.material_type,
+        "course_id": m.course_id,
+        "exam_year": m.exam_year,
+        "exam_board": m.exam_board,
+        "grade_level": m.grade_level,
+        "subject": m.subject,
         "page_count": m.page_count,
         "chunk_count": m.chunk_count,
         "word_count": m.word_count,
