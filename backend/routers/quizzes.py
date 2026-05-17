@@ -24,6 +24,12 @@ class SubmitAttemptRequest(BaseModel):
     time_taken: int = 0
 
 
+class GenerateMockRequest(BaseModel):
+    material_ids: List[int]
+    title: str = "Mock Test"
+    count: int = 10
+
+
 @router.post("/generate")
 def generate_quiz_endpoint(
     req: GenerateQuizRequest,
@@ -39,7 +45,6 @@ def generate_quiz_endpoint(
     if material.processing_status != "completed":
         raise HTTPException(status_code=400, detail="Material still being processed")
 
-    # Build content sample from stored chunks
     chunks = db.query(models.MaterialChunk).filter(
         models.MaterialChunk.material_id == req.material_id
     ).all()
@@ -77,6 +82,7 @@ def generate_quiz_endpoint(
             explanation=q.get("explanation", ""),
             topic=q.get("topic", ""),
             difficulty=q.get("difficulty", "medium"),
+            marks=int(q.get("marks", 2)),
         )
         db.add(qq)
 
@@ -95,6 +101,76 @@ def generate_quiz_endpoint(
         "title": quiz.title,
         "questions_count": quiz.questions_count,
         "message": "Quiz generated successfully",
+    }
+
+
+@router.post("/generate-mock")
+def generate_mock_endpoint(
+    req: GenerateMockRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Generate a mixed-format mock test (MCQ + short + long) from multiple materials."""
+    from services.quiz_service import generate_mock_test_questions
+
+    # Validate all materials belong to user
+    for mid in req.material_ids:
+        m = db.query(models.StudyMaterial).filter(
+            models.StudyMaterial.id == mid,
+            models.StudyMaterial.user_id == current_user.id,
+        ).first()
+        if not m:
+            raise HTTPException(status_code=404, detail=f"Material {mid} not found")
+
+    questions_data = generate_mock_test_questions(
+        db=db,
+        user_id=current_user.id,
+        material_ids=req.material_ids,
+        count=req.count,
+    )
+
+    if not questions_data:
+        raise HTTPException(status_code=500, detail="Mock test generation failed. Please try again.")
+
+    quiz = models.Quiz(
+        user_id=current_user.id,
+        material_id=req.material_ids[0] if req.material_ids else None,
+        title=req.title,
+        quiz_type="mock_test",
+        questions_count=len(questions_data),
+    )
+    db.add(quiz)
+    db.flush()
+
+    for q in questions_data:
+        qq = models.QuizQuestion(
+            quiz_id=quiz.id,
+            question=q.get("question", ""),
+            question_type=q.get("type", "mcq"),
+            options=q.get("options"),
+            correct_answer=q.get("correct_answer", ""),
+            explanation=q.get("explanation", ""),
+            topic=q.get("topic", ""),
+            difficulty=q.get("difficulty", "medium"),
+            marks=int(q.get("marks", 2)),
+        )
+        db.add(qq)
+
+    event = models.ActivityEvent(
+        user_id=current_user.id,
+        event_type="mock_test_generated",
+        description=f"Generated mock test: {req.title}",
+        event_metadata={"quiz_id": quiz.id, "material_ids": req.material_ids},
+    )
+    db.add(event)
+    db.commit()
+    db.refresh(quiz)
+
+    return {
+        "quiz_id": quiz.id,
+        "title": quiz.title,
+        "questions_count": quiz.questions_count,
+        "message": "Mock test generated successfully",
     }
 
 
@@ -145,6 +221,7 @@ def get_quiz(quiz_id: int, db: Session = Depends(get_db), current_user: models.U
                 "options": q.options,
                 "topic": q.topic,
                 "difficulty": q.difficulty,
+                "marks": getattr(q, "marks", 2) or 2,
             }
             for i, q in enumerate(questions)
         ],
@@ -164,18 +241,24 @@ def submit_attempt(
     if not quiz:
         raise HTTPException(status_code=404, detail="Quiz not found")
 
-    questions = db.query(models.QuizQuestion).filter(models.QuizQuestion.quiz_id == req.quiz_id).all()
+    questions = db.query(models.QuizQuestion).filter(
+        models.QuizQuestion.quiz_id == req.quiz_id
+    ).all()
+
     questions_data = [
         {
-            "question": q.question,
-            "correct_answer": q.correct_answer,
-            "topic": q.topic,
-            "explanation": q.explanation,
+            "question":      q.question,
+            "correct_answer":q.correct_answer,
+            "topic":         q.topic,
+            "explanation":   q.explanation,
+            "question_type": q.question_type,
+            "options":       q.options,
+            "marks":         getattr(q, "marks", 2) or 2,
         }
         for q in questions
     ]
 
-    result = score_attempt(questions_data, req.answers)
+    result = score_attempt(questions_data, req.answers, grade_written=True)
 
     attempt = models.QuizAttempt(
         quiz_id=req.quiz_id,
@@ -197,24 +280,34 @@ def submit_attempt(
     db.add(event)
     db.commit()
 
+    # Build detailed results merging per-question grades
+    q_grades = {g["index"]: g for g in result.get("question_grades", [])}
     detailed = []
     for i, q in enumerate(questions):
         user_ans = req.answers.get(str(i), req.answers.get(i, ""))
-        is_correct = user_ans.strip().upper()[:1] == q.correct_answer.strip().upper()[:1]
+        grade = q_grades.get(i, {})
         detailed.append({
-            "question": q.question,
-            "user_answer": user_ans,
+            "question":       q.question,
+            "user_answer":    user_ans,
             "correct_answer": q.correct_answer,
-            "is_correct": is_correct,
-            "explanation": q.explanation,
-            "topic": q.topic,
-            "options": q.options,
+            "is_correct":     grade.get("is_correct", False),
+            "marks_awarded":  grade.get("marks_awarded", 0),
+            "max_marks":      grade.get("max_marks", getattr(q, "marks", 2) or 2),
+            "feedback":       grade.get("feedback", ""),
+            "key_points_hit":   grade.get("key_points_hit", []),
+            "key_points_missed":grade.get("key_points_missed", []),
+            "explanation":    q.explanation,
+            "topic":          q.topic,
+            "options":        q.options,
+            "question_type":  q.question_type,
         })
 
     return {
-        "score": result["score_percentage"],
-        "correct": result["correct"],
-        "total": result["total"],
-        "weak_topics": result["weak_topics"],
-        "detailed_results": detailed,
+        "score":           result["score_percentage"],
+        "correct":         result["correct"],
+        "total":           result["total"],
+        "total_marks":     result["total_marks"],
+        "marks_awarded":   result["marks_awarded"],
+        "weak_topics":     result["weak_topics"],
+        "detailed_results":detailed,
     }
