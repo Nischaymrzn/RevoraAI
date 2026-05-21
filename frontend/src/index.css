@@ -1,0 +1,122 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 220 16% 95.5%;
+    --foreground: 222 39% 8%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 39% 8%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 39% 8%;
+
+    /* Primary: #6DEB74 → hsl(124, 77%, 67%) */
+    --primary: 124 77% 67%;
+    --primary-foreground: 222 39% 8%;
+
+    --secondary: 220 14% 95%;
+    --secondary-foreground: 222 39% 8%;
+
+    --muted: 220 14% 95%;
+    --muted-foreground: 220 9% 46%;
+
+    /* Accent: very light green tint */
+    --accent: 124 60% 94%;
+    --accent-foreground: 124 50% 26%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 124 77% 67%;
+
+    --radius: 0.5rem;
+
+    /* Sidebar */
+    --sidebar: 0 0% 100%;
+    --sidebar-border: 220 13% 91%;
+
+    /* Navbar */
+    --navbar: 0 0% 100%;
+  }
+
+  * {
+    @apply border-border;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html {
+    font-size: 19px;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+    font-weight: 600;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-[#6DEB74] hover:bg-[#52e05a] text-gray-900 font-medium px-4 py-2 rounded-lg transition-all duration-150 flex items-center gap-2 text-sm;
+  }
+  .btn-secondary {
+    @apply bg-white hover:bg-gray-50 text-gray-700 font-medium px-4 py-2 rounded-lg border border-gray-200 transition-colors duration-150 flex items-center gap-2 text-sm;
+  }
+  .btn-ghost {
+    @apply text-gray-600 hover:text-gray-900 hover:bg-gray-100 font-medium px-3 py-2 rounded-lg transition-colors duration-150 flex items-center gap-2 text-sm;
+  }
+  .card {
+    @apply bg-white rounded-xl border border-border;
+  }
+  .input {
+    @apply w-full px-3 py-2 rounded-lg border border-input focus:outline-none focus:ring-2 focus:ring-[#6DEB74]/30 text-sm bg-background;
+  }
+  .section-label {
+    @apply text-[10.5px] font-semibold text-muted-foreground uppercase tracking-widest px-3 mb-1;
+  }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: hsl(220 9% 70%); }
+
+/* Animations */
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+.fade-in { animation: fadeIn 0.2s ease-out; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner { animation: spin 1s linear infinite; }
+
+@keyframes pulse-red { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+.timer-warning { animation: pulse-red 1s ease-in-out infinite; }
+
+/* Animate-in for Radix portals */
+@keyframes in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes out { from { opacity: 1; } to { opacity: 0; } }
+.animate-in  { animation: in 0.15s ease; }
+.animate-out { animation: out 0.15s ease; }
+.fade-in-0   { --tw-enter-opacity: 0; }
+.fade-out-0  { --tw-exit-opacity: 0; }
+.zoom-in-95  { --tw-enter-scale: 0.95; }
+.zoom-out-95 { --tw-exit-scale: 0.95; }
+.slide-in-from-top-2    { --tw-enter-translate-y: -0.5rem; }
+.slide-in-from-bottom-2 { --tw-enter-translate-y: 0.5rem; }
+.slide-in-from-left-2   { --tw-enter-translate-x: -0.5rem; }
+.slide-in-from-right-2  { --tw-enter-translate-x: 0.5rem; }
