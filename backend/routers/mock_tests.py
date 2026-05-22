@@ -70,7 +70,7 @@ def create_mock_test(
             correct_answer=q.get("correct_answer", ""),
             explanation=q.get("explanation", ""),
             topic=q.get("topic", ""),
-            marks=q.get("marks", 1),
+            marks=q.get("marks", 2),
         )
         db.add(mq)
 
@@ -165,25 +165,59 @@ def submit_mock_test(
     questions = db.query(models.MockTestQuestion).filter(
         models.MockTestQuestion.mock_test_id == req.mock_test_id
     ).all()
+
+    # Build full questions_data including all fields score_attempt needs
     questions_data = [
-        {"question": q.question, "correct_answer": q.correct_answer, "topic": q.topic, "explanation": q.explanation}
+        {
+            "question":       q.question,
+            "correct_answer": q.correct_answer,
+            "topic":          q.topic,
+            "explanation":    q.explanation,
+            "question_type":  q.question_type,
+            "options":        q.options,
+            "marks":          q.marks or 2,
+        }
         for q in questions
     ]
 
-    result = score_attempt(questions_data, req.answers)
+    # Score with AI grading for written answers
+    result = score_attempt(questions_data, req.answers, grade_written=True)
 
-    all_attempts = db.query(models.MockTestAttempt).filter(
+    # Build detailed per-question results (mirrors quizzes.py format)
+    q_grades = {g["index"]: g for g in result.get("question_grades", [])}
+    detailed = []
+    for i, q in enumerate(questions):
+        user_ans = req.answers.get(str(i), req.answers.get(i, ""))
+        grade = q_grades.get(i, {})
+        detailed.append({
+            "question":          q.question,
+            "user_answer":       user_ans,
+            "correct_answer":    q.correct_answer,
+            "is_correct":        grade.get("is_correct", False),
+            "marks_awarded":     grade.get("marks_awarded", 0),
+            "max_marks":         grade.get("max_marks", q.marks or 2),
+            "feedback":          grade.get("feedback", ""),
+            "key_points_hit":    grade.get("key_points_hit", []),
+            "key_points_missed": grade.get("key_points_missed", []),
+            "explanation":       q.explanation,
+            "topic":             q.topic,
+            "options":           q.options,
+            "question_type":     q.question_type,
+        })
+
+    # Calculate readiness using all mock scores for this user
+    prior_attempts = db.query(models.MockTestAttempt).filter(
         models.MockTestAttempt.user_id == current_user.id
     ).all()
-    mock_scores = [a.score for a in all_attempts]
+    prior_mock_scores = [a.score for a in prior_attempts]
     quiz_attempts = db.query(models.QuizAttempt).filter(models.QuizAttempt.user_id == current_user.id).all()
     avg_quiz = sum(a.score for a in quiz_attempts) / len(quiz_attempts) if quiz_attempts else 0
 
     readiness_data = calculate_readiness({
-        "quiz_attempts": len(quiz_attempts),
-        "avg_score": avg_quiz,
-        "mock_scores": mock_scores + [result["score_percentage"]],
-        "weak_topics": result["weak_topics"],
+        "quiz_attempts":   len(quiz_attempts),
+        "avg_score":       avg_quiz,
+        "mock_scores":     prior_mock_scores + [result["score_percentage"]],
+        "weak_topics":     result["weak_topics"],
         "materials_count": db.query(models.StudyMaterial).filter(models.StudyMaterial.user_id == current_user.id).count(),
         "questions_asked": db.query(models.QueryHistory).filter(models.QueryHistory.user_id == current_user.id).count(),
     })
@@ -203,32 +237,20 @@ def submit_mock_test(
 
     event = models.ActivityEvent(
         user_id=current_user.id,
-        event_type="mock_test_attempt",
+        event_type="mock_attempt",
         description=f"Completed mock test: {mock.title} — {result['score_percentage']}%",
         event_metadata={"mock_test_id": req.mock_test_id, "score": result["score_percentage"]},
     )
     db.add(event)
     db.commit()
 
-    detailed = []
-    for i, q in enumerate(questions):
-        user_ans = req.answers.get(str(i), req.answers.get(i, ""))
-        is_correct = user_ans.strip().upper()[:1] == q.correct_answer.strip().upper()[:1]
-        detailed.append({
-            "question": q.question,
-            "user_answer": user_ans,
-            "correct_answer": q.correct_answer,
-            "is_correct": is_correct,
-            "explanation": q.explanation,
-            "topic": q.topic,
-            "options": q.options,
-        })
-
     return {
-        "score": result["score_percentage"],
-        "correct": result["correct"],
-        "total": result["total"],
-        "weak_topics": result["weak_topics"],
-        "readiness": readiness_data,
+        "score":           result["score_percentage"],
+        "correct":         result["correct"],
+        "total":           result["total"],
+        "total_marks":     result["total_marks"],
+        "marks_awarded":   result["marks_awarded"],
+        "weak_topics":     result["weak_topics"],
+        "readiness":       readiness_data,
         "detailed_results": detailed,
     }
