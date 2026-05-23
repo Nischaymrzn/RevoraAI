@@ -14,6 +14,7 @@ const navSections = [
       { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
       { to: '/materials', icon: FolderOpen, label: 'Materials' },
       { to: '/study', icon: Brain, label: 'Knowledge AI' },
+      { to: '/tutor', icon: GraduationCap, label: 'AI Tutor' },
     ],
   },
   {

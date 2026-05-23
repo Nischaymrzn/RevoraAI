@@ -9,6 +9,8 @@ import Dashboard from './pages/Dashboard';
 import Materials from './pages/Materials';
 import StudyAI from './pages/StudyAI';
 import Progress from './pages/Progress';
+import MockTest from './pages/MockTest';
+import AITutor from './pages/AITutor';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? '';
 
@@ -42,6 +44,9 @@ export default function App() {
           <Route path="/materials" element={<ProtectedRoute><Layout><Materials /></Layout></ProtectedRoute>} />
           <Route path="/study"     element={<ProtectedRoute><Layout><StudyAI /></Layout></ProtectedRoute>} />
           <Route path="/progress"  element={<ProtectedRoute><Layout><Progress /></Layout></ProtectedRoute>} />
+          <Route path="/chat"      element={<Navigate to="/tutor" replace />} />
+          <Route path="/tutor"     element={<ProtectedRoute><Layout><AITutor /></Layout></ProtectedRoute>} />
+          <Route path="/mock/:quizId" element={<ProtectedRoute><MockTest /></ProtectedRoute>} />
         </Routes>
       </BrowserRouter>
     </GoogleOAuthProvider>
