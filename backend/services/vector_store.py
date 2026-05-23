@@ -38,6 +38,7 @@ def search_chunks(
     query: str,
     n_results: int = 5,
     material_id: Optional[int] = None,
+    material_ids: Optional[List[int]] = None,
     material_type: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
@@ -74,6 +75,8 @@ def search_chunks(
 
         if material_id is not None:
             q = q.filter(models.MaterialChunk.material_id == material_id)
+        elif material_ids is not None and len(material_ids) > 0:
+            q = q.filter(models.MaterialChunk.material_id.in_(material_ids))
 
         if material_type is not None:
             q = q.filter(models.StudyMaterial.material_type == material_type)

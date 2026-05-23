@@ -48,6 +48,60 @@ def _extract_pdf(filepath: str) -> Tuple[str, int]:
             t = page.extract_text()
             if t:
                 texts.append(t)
+
+    combined = "\n\n".join(texts)
+
+    # Detect scanned PDFs: strip known watermarks and check remaining content
+    content_check = combined
+    for watermark in ["Downloaded from sajhanotes.com", "Downloaded from"]:
+        content_check = content_check.replace(watermark, "")
+    content_check = content_check.strip()
+
+    # If fewer than 200 real characters were extracted, assume scanned image PDF
+    if len(content_check) < 200 and page_count > 0:
+        print(f"[INFO] Scanned PDF detected — only {len(content_check)} chars from text layer. Running AI OCR...")
+        try:
+            return _extract_pdf_with_ocr(filepath)
+        except Exception as ocr_err:
+            print(f"[WARN] AI OCR failed: {ocr_err}. Returning limited text.")
+
+    return combined, page_count
+
+
+def _extract_pdf_with_ocr(filepath: str) -> Tuple[str, int]:
+    """
+    Render each page of a scanned PDF as an image and extract text
+    using Groq's vision model. No Tesseract required.
+    """
+    import fitz  # PyMuPDF
+    from services.ai_client import generate_with_image
+
+    doc = fitz.open(filepath)
+    page_count = len(doc)
+    texts = []
+
+    OCR_PROMPT = (
+        "You are an OCR tool. Output ONLY the raw text from this exam paper image. "
+        "No explanations, no steps, no commentary — just the text exactly as printed. "
+        "Include every question number, question text, all options (A/B/C/D), "
+        "marks in brackets, group headers, and any instructions. "
+        "Preserve the original structure and wording faithfully."
+    )
+
+    for i, page in enumerate(doc):
+        # Render at 200 DPI in grayscale for smaller payload
+        mat = fitz.Matrix(200 / 72, 200 / 72)
+        pix = page.get_pixmap(matrix=mat, colorspace=fitz.csGRAY)
+        img_bytes = pix.tobytes("png")
+
+        try:
+            page_text = generate_with_image(img_bytes, OCR_PROMPT)
+            texts.append(f"[Page {i + 1}]\n{page_text}")
+            print(f"[OCR] Page {i + 1}/{page_count} done ({len(page_text)} chars)")
+        except Exception as e:
+            print(f"[WARN] OCR failed for page {i + 1}: {e}")
+
+    doc.close()
     return "\n\n".join(texts), page_count
 
 

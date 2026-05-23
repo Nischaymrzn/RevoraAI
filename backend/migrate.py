@@ -37,6 +37,53 @@ MIGRATIONS = [
     CREATE INDEX material_chunks_embedding_idx
     ON material_chunks USING hnsw (embedding vector_cosine_ops)
     """,
+
+    # ── v2 migrations ──────────────────────────────────────────────────────────
+
+    # Courses table (created by SQLAlchemy Base.metadata.create_all — listed
+    # here only to document intent; the CREATE TABLE is idempotent via ORM)
+    "SELECT 1",   # no-op placeholder
+
+    # study_materials: course link + paper metadata
+    "ALTER TABLE study_materials ADD COLUMN IF NOT EXISTS course_id INTEGER REFERENCES courses(id)",
+    "ALTER TABLE study_materials ADD COLUMN IF NOT EXISTS exam_year INTEGER",
+    "ALTER TABLE study_materials ADD COLUMN IF NOT EXISTS exam_board VARCHAR",
+    "ALTER TABLE study_materials ADD COLUMN IF NOT EXISTS grade_level VARCHAR",
+    "ALTER TABLE study_materials ADD COLUMN IF NOT EXISTS subject VARCHAR",
+
+    # pattern_analysis: multi-paper context
+    "ALTER TABLE pattern_analysis ADD COLUMN IF NOT EXISTS course_id INTEGER",
+    "ALTER TABLE pattern_analysis ADD COLUMN IF NOT EXISTS material_ids_json JSON",
+    "ALTER TABLE pattern_analysis ADD COLUMN IF NOT EXISTS is_past_paper_analysis BOOLEAN DEFAULT FALSE",
+
+    # ── v3 migrations ──────────────────────────────────────────────────────────
+
+    # pattern_analysis: full history + question cluster storage
+    "ALTER TABLE pattern_analysis ADD COLUMN IF NOT EXISTS full_result_json JSON",
+    "ALTER TABLE pattern_analysis ADD COLUMN IF NOT EXISTS question_clusters_json JSON",
+    "ALTER TABLE pattern_analysis ADD COLUMN IF NOT EXISTS section_breakdown_json JSON",
+    "ALTER TABLE pattern_analysis ADD COLUMN IF NOT EXISTS analysis_label VARCHAR",
+    "ALTER TABLE pattern_analysis ADD COLUMN IF NOT EXISTS papers_analyzed JSON",
+
+    # paper_questions table: created by ORM via create_all
+    "SELECT 1",
+
+    # HNSW index on paper_questions.embedding for fast cross-paper similarity
+    "DROP INDEX IF EXISTS paper_questions_embedding_idx",
+    """
+    CREATE INDEX paper_questions_embedding_idx
+    ON paper_questions USING hnsw (embedding vector_cosine_ops)
+    """,
+
+    # ── v4 migrations ──────────────────────────────────────────────────────────
+
+    # paper_questions: question category (code | theory | numerical | diagram | other)
+    "ALTER TABLE paper_questions ADD COLUMN IF NOT EXISTS question_category VARCHAR",
+
+    # ── v5 migrations ──────────────────────────────────────────────────────────
+
+    # quiz_questions: marks per question for partial-credit grading
+    "ALTER TABLE quiz_questions ADD COLUMN IF NOT EXISTS marks INTEGER DEFAULT 2",
 ]
 
 

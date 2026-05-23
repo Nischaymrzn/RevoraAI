@@ -26,7 +26,6 @@ export default function App() {
   return (
     <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
       <BrowserRouter>
-        {/* Global toaster — available on every page including auth */}
         <Toaster
           position="bottom-right"
           richColors

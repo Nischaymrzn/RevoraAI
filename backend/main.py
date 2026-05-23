@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from database import engine, Base
 import models
 
-from routers import auth, materials, qa, quizzes, mock_tests, analytics
+from routers import auth, materials, qa, quizzes, mock_tests, analytics, courses
 
 # Create all tables
 Base.metadata.create_all(bind=engine)
@@ -26,6 +26,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(courses.router)
 app.include_router(materials.router)
 app.include_router(qa.router)
 app.include_router(quizzes.router)

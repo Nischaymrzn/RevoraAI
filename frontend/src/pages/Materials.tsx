@@ -2,11 +2,11 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import {
   Upload, Trash2, FileText, Loader2, CheckCircle, Clock,
   AlertCircle, ChevronDown, ChevronUp, RefreshCw, FolderOpen,
-  Hash, File, FileSearch, X,
+  Hash, File, FileSearch, X, BookOpen, Plus,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { materialsApi } from '../services/api';
-import { StudyMaterial } from '../types';
+import { materialsApi, coursesApi } from '../services/api';
+import { StudyMaterial, Course } from '../types';
 import { Skeleton } from '../components/ui/skeleton';
 import { cn } from '../lib/utils';
 
@@ -129,8 +129,180 @@ function MaterialsSkeleton() {
   );
 }
 
+function UploadTypeModal({
+  files,
+  courses,
+  onConfirm,
+  onCancel,
+  uploading,
+  onCourseCreated,
+}: {
+  files: File[];
+  courses: Course[];
+  onConfirm: (type: string, courseId: number | null) => void;
+  onCancel: () => void;
+  uploading: boolean;
+  onCourseCreated: (course: Course) => void;
+}) {
+  const [selectedType, setSelectedType] = useState<string>('general');
+  const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
+  const [creatingCourse, setCreatingCourse] = useState(false);
+  const [newCourseName, setNewCourseName] = useState('');
+  const [savingCourse, setSavingCourse] = useState(false);
+
+  const types = [
+    { value: 'general',    label: 'Course / Lesson Material', desc: 'Lecture notes, textbooks, slides, study notes' },
+    { value: 'past_paper', label: 'Past Exam Paper',          desc: 'Previous exam questions for pattern analysis' },
+  ];
+
+  const handleCreateCourse = async () => {
+    if (!newCourseName.trim()) return;
+    setSavingCourse(true);
+    try {
+      const res = await coursesApi.create({ name: newCourseName.trim() });
+      const course: Course = res.data;
+      onCourseCreated(course);
+      setSelectedCourseId(course.id);
+      setCreatingCourse(false);
+      setNewCourseName('');
+      toast.success(`Course "${course.name}" created`);
+    } catch {
+      toast.error('Failed to create course');
+    } finally {
+      setSavingCourse(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={onCancel} />
+      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-7 animate-in fade-in-0 zoom-in-95 max-h-[90vh] overflow-y-auto">
+        <button
+          onClick={onCancel}
+          className="absolute top-4 right-4 w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+        >
+          <X size={15} />
+        </button>
+
+        <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center mb-4">
+          <Upload size={20} className="text-gray-500" />
+        </div>
+
+        <h3 className="text-[17px] font-bold text-gray-900 mb-1">Upload material</h3>
+        <p className="text-[13px] text-gray-400 mb-5">
+          {files.length === 1 ? files[0].name : `${files.length} files`}
+        </p>
+
+        {/* Type selection */}
+        <p className="text-[12px] font-semibold text-gray-500 uppercase tracking-wider mb-2">Material type</p>
+        <div className="space-y-2 mb-5">
+          {types.map((t) => (
+            <label
+              key={t.value}
+              className={cn(
+                'flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all',
+                selectedType === t.value
+                  ? 'border-gray-900 bg-gray-50'
+                  : 'border-gray-200 hover:border-gray-300'
+              )}
+            >
+              <input
+                type="radio"
+                name="material_type"
+                value={t.value}
+                checked={selectedType === t.value}
+                onChange={() => setSelectedType(t.value)}
+                className="mt-0.5 accent-gray-900"
+              />
+              <div>
+                <p className="text-[13.5px] font-semibold text-gray-900">{t.label}</p>
+                <p className="text-[12px] text-gray-400 mt-0.5">{t.desc}</p>
+              </div>
+            </label>
+          ))}
+        </div>
+
+        {/* Course selection */}
+        <p className="text-[12px] font-semibold text-gray-500 uppercase tracking-wider mb-2">Link to course <span className="font-normal normal-case text-gray-400">(optional)</span></p>
+        <div className="space-y-1.5 mb-2">
+          <label className={cn(
+            'flex items-center gap-2.5 px-3 py-2.5 rounded-lg border cursor-pointer transition-all text-[13.5px]',
+            selectedCourseId === null ? 'border-gray-900 bg-gray-50 font-semibold' : 'border-gray-200 hover:border-gray-300 text-gray-500'
+          )}>
+            <input type="radio" name="course" checked={selectedCourseId === null} onChange={() => setSelectedCourseId(null)} className="accent-gray-900" />
+            No course
+          </label>
+          {courses.map((c) => (
+            <label key={c.id} className={cn(
+              'flex items-center gap-2.5 px-3 py-2.5 rounded-lg border cursor-pointer transition-all text-[13.5px]',
+              selectedCourseId === c.id ? 'border-gray-900 bg-gray-50 font-semibold' : 'border-gray-200 hover:border-gray-300 text-gray-500'
+            )}>
+              <input type="radio" name="course" checked={selectedCourseId === c.id} onChange={() => setSelectedCourseId(c.id)} className="accent-gray-900" />
+              <BookOpen size={13} className="text-gray-400" />
+              <span className="flex-1 truncate">{c.name}</span>
+              {c.past_paper_count > 0 && (
+                <span className="text-[11px] text-violet-500 font-semibold">{c.past_paper_count} papers</span>
+              )}
+            </label>
+          ))}
+        </div>
+
+        {/* Create new course inline */}
+        {creatingCourse ? (
+          <div className="flex gap-2 mb-5 mt-2">
+            <input
+              autoFocus
+              value={newCourseName}
+              onChange={(e) => setNewCourseName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleCreateCourse(); if (e.key === 'Escape') setCreatingCourse(false); }}
+              placeholder="Course name…"
+              className="flex-1 h-9 px-3 text-[13px] border border-gray-200 rounded-lg focus:outline-none focus:border-gray-400"
+            />
+            <button
+              onClick={handleCreateCourse}
+              disabled={savingCourse || !newCourseName.trim()}
+              className="h-9 px-3 bg-gray-900 text-white rounded-lg text-[13px] font-medium disabled:opacity-50 flex items-center gap-1.5"
+            >
+              {savingCourse ? <Loader2 size={12} className="animate-spin" /> : 'Save'}
+            </button>
+            <button onClick={() => setCreatingCourse(false)} className="h-9 px-2 text-gray-400 hover:text-gray-600 rounded-lg">
+              <X size={14} />
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setCreatingCourse(true)}
+            className="flex items-center gap-1.5 text-[12.5px] text-gray-400 hover:text-gray-700 transition-colors mb-5 mt-2"
+          >
+            <Plus size={13} />
+            New course
+          </button>
+        )}
+
+        <div className="flex gap-2.5">
+          <button
+            onClick={onCancel}
+            className="flex-1 h-11 rounded-lg border border-gray-200 text-gray-700 text-[14px] font-medium hover:bg-gray-50 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => onConfirm(selectedType, selectedCourseId)}
+            disabled={uploading}
+            className="flex-1 h-11 rounded-lg bg-[#6DEB74] hover:bg-[#52e05a] text-gray-900 text-[14px] font-semibold transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
+          >
+            {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+            {uploading ? 'Uploading…' : 'Upload'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Materials() {
   const [materials, setMaterials]         = useState<StudyMaterial[]>([]);
+  const [courses, setCourses]             = useState<Course[]>([]);
   const [loading, setLoading]             = useState(true);
   const [uploading, setUploading]         = useState(false);
   const [dragOver, setDragOver]           = useState(false);
@@ -140,12 +312,16 @@ export default function Materials() {
   const [error, setError]                 = useState('');
   const [deleteTarget, setDeleteTarget]   = useState<StudyMaterial | null>(null);
   const [deleting, setDeleting]           = useState(false);
+  const [pendingFiles, setPendingFiles]   = useState<File[] | null>(null);
   const fileRef  = useRef<HTMLInputElement>(null);
   const pollRef  = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(() => {
-    materialsApi.list()
-      .then((res) => setMaterials(res.data))
+    Promise.all([materialsApi.list(), coursesApi.list()])
+      .then(([matRes, crsRes]) => {
+        setMaterials(matRes.data);
+        setCourses(crsRes.data);
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
@@ -161,13 +337,18 @@ export default function Materials() {
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [load]);
 
-  const handleFiles = async (files: FileList | null) => {
+  const handleFiles = (files: FileList | null) => {
     if (!files?.length) return;
+    setPendingFiles(Array.from(files));
+  };
+
+  const handleUploadWithType = async (type: string, courseId: number | null) => {
+    if (!pendingFiles?.length) return;
     setError('');
     setUploading(true);
-    for (const file of Array.from(files)) {
+    for (const file of pendingFiles) {
       try {
-        await materialsApi.upload(file);
+        await materialsApi.upload(file, type, courseId);
         toast.success(`${file.name} uploaded — processing started`);
       } catch (err: any) {
         const msg = err.response?.data?.detail || `Failed to upload ${file.name}`;
@@ -176,6 +357,9 @@ export default function Materials() {
       }
     }
     setUploading(false);
+    setPendingFiles(null);
+    // reset file input so same file can be re-selected
+    if (fileRef.current) fileRef.current.value = '';
     load();
   };
 
@@ -213,6 +397,16 @@ export default function Materials() {
 
   return (
     <>
+    {pendingFiles && (
+      <UploadTypeModal
+        files={pendingFiles}
+        courses={courses}
+        onConfirm={handleUploadWithType}
+        onCancel={() => { setPendingFiles(null); if (fileRef.current) fileRef.current.value = ''; }}
+        uploading={uploading}
+        onCourseCreated={(c) => setCourses((prev) => [c, ...prev])}
+      />
+    )}
     {deleteTarget && (
       <DeleteModal
         material={deleteTarget}
@@ -328,8 +522,29 @@ export default function Materials() {
                   <div className="flex items-center gap-2.5 flex-wrap">
                     <p className="font-semibold text-[15px] text-gray-900 truncate">{m.original_name}</p>
                     <StatusPill status={m.processing_status} />
+                    {m.material_type === 'past_paper' && (
+                      <span className="inline-flex items-center text-[11.5px] font-semibold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700">
+                        Past Paper
+                      </span>
+                    )}
+                    {m.exam_year && (
+                      <span className="inline-flex items-center text-[11.5px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600">
+                        {m.exam_year}
+                      </span>
+                    )}
+                    {m.subject && (
+                      <span className="inline-flex items-center text-[11.5px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">
+                        {m.subject}
+                      </span>
+                    )}
+                    {m.exam_board && (
+                      <span className="inline-flex items-center text-[11.5px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
+                        {m.exam_board}
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center flex-wrap gap-x-3 gap-y-0 mt-1.5 text-[13px] text-gray-400">
+                    {m.course_id && (() => { const c = courses.find(c => c.id === m.course_id); return c ? <span className="flex items-center gap-1 text-gray-500"><BookOpen size={11} />{c.name}</span> : null; })()}
                     {m.page_count  > 0 && <span className="flex items-center gap-1"><File size={11} />{m.page_count}p</span>}
                     {m.chunk_count > 0 && <span className="flex items-center gap-1"><Hash size={11} />{m.chunk_count} chunks</span>}
                     {m.word_count  > 0 && <span>{m.word_count.toLocaleString()} words</span>}

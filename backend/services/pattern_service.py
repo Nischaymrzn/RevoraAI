@@ -1,7 +1,83 @@
 import json
 import re
-from typing import Dict, Any
+from typing import Dict, Any, List
 from services.ai_client import generate
+
+
+PAST_PAPER_PROMPT = """You are Revora AI, an expert exam question analyst. The following contains questions from {paper_count} past exam paper(s).
+Analyse the question patterns, recurring topics, and common exam styles across these papers.
+
+Past Paper Content:
+{content}
+
+Provide analysis in the following JSON format:
+{{
+  "main_topics": [
+    {{
+      "name": "Topic Name",
+      "frequency": "high|medium|low",
+      "importance": 90,
+      "paper_count": 3,
+      "subtopics": ["subtopic1", "subtopic2"],
+      "exam_weight_estimate": "35%"
+    }}
+  ],
+  "likely_questions": [
+    {{
+      "question": "Specific predicted exam question based on recurring patterns",
+      "topic": "Topic name",
+      "type": "essay|short_answer|mcq|calculation|definition|diagram",
+      "marks": 10,
+      "likelihood": 95,
+      "appears_in_papers": 3
+    }}
+  ],
+  "recurring_patterns": [
+    {{
+      "pattern": "Description of a question pattern seen repeatedly across papers",
+      "frequency_count": 4,
+      "topics": ["topic1", "topic2"]
+    }}
+  ],
+  "key_concepts": ["concept1", "concept2", "concept3"],
+  "revision_priority": ["Highest priority topic", "Second priority topic"],
+  "analysis_summary": "Concise summary of the recurring exam patterns found across these past papers and which topics to prioritise for the next exam",
+  "topic_distribution": {{
+    "Topic1": 40,
+    "Topic2": 30,
+    "Topic3": 20,
+    "Other": 10
+  }}
+}}
+
+Focus on what comes up REPEATEDLY and what the patterns predict for future exams. Return only valid JSON:"""
+
+
+def analyze_past_papers(content: str, paper_count: int = 1) -> Dict[str, Any]:
+    """Specialized analysis for past exam papers — finds recurring question patterns."""
+    max_chars = 9000
+    truncated = content[:max_chars] if len(content) > max_chars else content
+
+    prompt = PAST_PAPER_PROMPT.format(content=truncated, paper_count=paper_count)
+
+    try:
+        raw = generate(prompt, temperature=0.3, large=True)
+        json_match = re.search(r'\{.*\}', raw, re.DOTALL)
+        if json_match:
+            data = json.loads(json_match.group())
+            return data
+    except Exception:
+        pass
+
+    return {
+        "main_topics": [],
+        "likely_questions": [],
+        "recurring_patterns": [],
+        "key_concepts": [],
+        "revision_priority": [],
+        "analysis_summary": "Pattern analysis could not be completed. Please try again.",
+        "topic_distribution": {},
+    }
 
 
 PATTERN_PROMPT = """You are Revora AI, an expert academic analyst. Analyze the following study material and identify exam patterns, repeated topics, and likely questions.

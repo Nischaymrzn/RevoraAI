@@ -41,11 +41,24 @@ export const authApi = {
   me: () => api.get('/api/auth/me'),
 };
 
+// Courses
+export const coursesApi = {
+  list: () => api.get('/api/courses/'),
+  create: (data: { name: string; code?: string; grade_level?: string; exam_board?: string; description?: string }) =>
+    api.post('/api/courses/', data),
+  get: (id: number) => api.get(`/api/courses/${id}`),
+  update: (id: number, data: Partial<{ name: string; code: string; grade_level: string; exam_board: string; description: string }>) =>
+    api.patch(`/api/courses/${id}`, data),
+  delete: (id: number) => api.delete(`/api/courses/${id}`),
+};
+
 // Materials
 export const materialsApi = {
-  upload: (file: File) => {
+  upload: (file: File, material_type: string = 'general', course_id?: number | null) => {
     const form = new FormData();
     form.append('file', file);
+    form.append('material_type', material_type);
+    if (course_id != null) form.append('course_id', String(course_id));
     return api.post('/api/materials/upload', form, { headers: { 'Content-Type': 'multipart/form-data' } });
   },
   list: () => api.get('/api/materials/'),
@@ -56,11 +69,24 @@ export const materialsApi = {
 
 // Q&A
 export const qaApi = {
-  ask: (question: string, materialId?: number) =>
-    api.post('/api/qa/ask', { question, material_id: materialId }),
+  ask: (question: string, materialId?: number, materialIds?: number[]) =>
+    api.post('/api/qa/ask', {
+      question,
+      material_id: materialId,
+      material_ids: materialIds && materialIds.length > 0 ? materialIds : undefined,
+    }),
   history: (limit = 20) => api.get(`/api/qa/history?limit=${limit}`),
   analyzePatterns: (materialId: number) =>
     api.post('/api/qa/analyze-patterns', { material_id: materialId }),
+  analyzePapers: (materialIds: number[], label?: string) =>
+    api.post('/api/qa/analyze-papers', { material_ids: materialIds, label }),
+  lessonSummary: (materialIds: number[]) =>
+    api.post('/api/qa/lesson-summary', { material_ids: materialIds }),
+  analysisHistory: (courseId?: number) =>
+    api.get(`/api/qa/analysis-history${courseId ? `?course_id=${courseId}` : ''}`),
+  analysisDetail: (id: number) => api.get(`/api/qa/analysis-history/${id}`),
+  assessmentFromAnalysis: (analysisId: number, count: number, title?: string) =>
+    api.post('/api/qa/assessment-from-analysis', { analysis_id: analysisId, count, title }),
   getPatternAnalysis: (materialId: number) =>
     api.get(`/api/qa/pattern-analysis/${materialId}`),
 };
@@ -69,6 +95,8 @@ export const qaApi = {
 export const quizzesApi = {
   generate: (data: { material_id: number; title: string; quiz_type: string; count: number }) =>
     api.post('/api/quizzes/generate', data),
+  generateMock: (data: { material_ids: number[]; title: string; count: number }) =>
+    api.post('/api/quizzes/generate-mock', data),
   list: () => api.get('/api/quizzes/'),
   get: (id: number) => api.get(`/api/quizzes/${id}`),
   submit: (quizId: number, answers: Record<string, string>, timeTaken: number) =>

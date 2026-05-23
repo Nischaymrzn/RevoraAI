@@ -26,6 +26,7 @@ def answer_question(
     user_id: int,
     question: str,
     material_id: Optional[int] = None,
+    material_ids: Optional[List[int]] = None,
     material_type: Optional[str] = None,
     n_chunks: int = 5,
 ) -> Dict[str, Any]:
@@ -35,6 +36,7 @@ def answer_question(
         question,
         n_results=n_chunks,
         material_id=material_id,
+        material_ids=material_ids,
         material_type=material_type,
     )
 

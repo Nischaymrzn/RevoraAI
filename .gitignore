@@ -23,6 +23,8 @@ __pycache__/
 *.pyo
 *.pyd
 .python-version
+.start_backend.bat
+.start_frontend.bat
 .venv/
 venv/
 env/
