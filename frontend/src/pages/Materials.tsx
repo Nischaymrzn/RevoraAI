@@ -28,11 +28,11 @@ function timeAgo(dateStr: string) {
 }
 
 const FILE_COLORS: Record<string, string> = {
-  '.pdf':  'bg-red-50 text-red-500',
-  '.docx': 'bg-blue-50 text-blue-500',
-  '.doc':  'bg-blue-50 text-blue-500',
-  '.pptx': 'bg-orange-50 text-orange-500',
-  '.txt':  'bg-gray-100 text-gray-500',
+  '.pdf':  'bg-zinc-900 text-white',
+  '.docx': 'bg-zinc-100 text-zinc-600',
+  '.doc':  'bg-zinc-100 text-zinc-600',
+  '.pptx': 'bg-zinc-100 text-zinc-600',
+  '.txt':  'bg-zinc-100 text-zinc-500',
 };
 
 function FileChip({ ext }: { ext: string }) {
@@ -48,10 +48,10 @@ function FileChip({ ext }: { ext: string }) {
 
 function StatusPill({ status }: { status: string }) {
   const variants: Record<string, { cls: string; label: string; icon: any }> = {
-    completed:  { cls: 'bg-green-100 text-green-700', label: 'Ready',      icon: CheckCircle },
-    processing: { cls: 'bg-amber-100 text-amber-700', label: 'Processing', icon: Loader2     },
-    pending:    { cls: 'bg-gray-100 text-gray-500',   label: 'Pending',    icon: Clock       },
-    failed:     { cls: 'bg-red-100 text-red-600',     label: 'Failed',     icon: AlertCircle },
+    completed:  { cls: 'bg-zinc-100 text-zinc-700',  label: 'Ready',      icon: CheckCircle },
+    processing: { cls: 'bg-zinc-100 text-zinc-600',  label: 'Processing', icon: Loader2     },
+    pending:    { cls: 'bg-zinc-100 text-zinc-500',  label: 'Pending',    icon: Clock       },
+    failed:     { cls: 'bg-red-50 text-red-600',     label: 'Failed',     icon: AlertCircle },
   };
   const { cls, label, icon: Icon } = variants[status] || variants.pending;
   return (
@@ -523,22 +523,22 @@ export default function Materials() {
                     <p className="font-semibold text-[15px] text-gray-900 truncate">{m.original_name}</p>
                     <StatusPill status={m.processing_status} />
                     {m.material_type === 'past_paper' && (
-                      <span className="inline-flex items-center text-[11.5px] font-semibold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700">
+                      <span className="inline-flex items-center text-[11.5px] font-semibold px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600">
                         Past Paper
                       </span>
                     )}
                     {m.exam_year && (
-                      <span className="inline-flex items-center text-[11.5px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600">
+                      <span className="inline-flex items-center text-[11.5px] font-semibold px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600">
                         {m.exam_year}
                       </span>
                     )}
                     {m.subject && (
-                      <span className="inline-flex items-center text-[11.5px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">
+                      <span className="inline-flex items-center text-[11.5px] font-semibold px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600">
                         {m.subject}
                       </span>
                     )}
                     {m.exam_board && (
-                      <span className="inline-flex items-center text-[11.5px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
+                      <span className="inline-flex items-center text-[11.5px] px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-500">
                         {m.exam_board}
                       </span>
                     )}
@@ -554,7 +554,7 @@ export default function Materials() {
                   </div>
                   {m.processing_status === 'processing' && (
                     <div className="mt-2 h-1 bg-gray-100 rounded-full overflow-hidden max-w-xs">
-                      <div className="h-full bg-amber-400 rounded-full animate-pulse w-2/3" />
+                      <div className="h-full bg-zinc-400 rounded-full animate-pulse w-2/3" />
                     </div>
                   )}
                 </div>

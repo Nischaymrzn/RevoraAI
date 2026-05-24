@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: '',
+  baseURL: import.meta.env.VITE_API_URL ?? '',
   timeout: 120000,
 });
 
@@ -64,6 +64,7 @@ export const materialsApi = {
   list: () => api.get('/api/materials/'),
   get: (id: number) => api.get(`/api/materials/${id}`),
   summarize: (id: number) => api.post(`/api/materials/${id}/summarize`),
+  flashcards: (id: number, count = 15) => api.post(`/api/materials/${id}/flashcards?count=${count}`),
   delete: (id: number) => api.delete(`/api/materials/${id}`),
 };
 
@@ -103,9 +104,9 @@ export const quizzesApi = {
     api.post('/api/quizzes/attempt', { quiz_id: quizId, answers, time_taken: timeTaken }),
 };
 
-// Mock tests
+// Mock tests  (separate DB table: mock_tests / mock_test_attempts)
 export const mockTestsApi = {
-  create: (data: { title: string; material_ids: number[]; questions_count: number; time_limit: number }) =>
+  create: (data: { title: string; material_ids: number[]; questions_count: number; time_limit?: number }) =>
     api.post('/api/mock-tests/create', data),
   list: () => api.get('/api/mock-tests/'),
   get: (id: number) => api.get(`/api/mock-tests/${id}`),
