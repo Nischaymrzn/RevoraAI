@@ -1,6 +1,3 @@
--- Run this in your Supabase SQL Editor before starting the backend
--- Go to: Supabase Dashboard → SQL Editor → New query → paste & run
-
 -- 1. Enable pgvector extension
 CREATE EXTENSION IF NOT EXISTS vector;
 
