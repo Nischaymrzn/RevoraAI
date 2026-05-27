@@ -222,7 +222,7 @@ function AnalysisResult({
                     <Label content={<DonutCenter />} position="center" />
                   </Pie>
                   <RechartsTip
-                    formatter={(v: any, name: string) => [`${v ?? 0} questions`, name]}
+                    formatter={(v: any, name: any) => [`${v ?? 0} questions`, name]}
                     contentStyle={TIP_STYLE}
                   />
                   <Legend
