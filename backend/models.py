@@ -89,7 +89,7 @@ class MaterialChunk(Base):
     page_number = Column(Integer, default=0)
     char_count = Column(Integer, default=0)
 
-    # pgvector embedding (768 dims = text-embedding-004)
+    # pgvector embedding sized to EMBEDDING_DIMS
     embedding = Column(Vector(EMBEDDING_DIMS), nullable=True)
 
     material = relationship("StudyMaterial", back_populates="chunks")

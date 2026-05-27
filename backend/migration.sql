@@ -5,8 +5,8 @@ CREATE EXTENSION IF NOT EXISTS vector;
 ALTER TABLE study_materials ADD COLUMN IF NOT EXISTS material_type VARCHAR DEFAULT 'general';
 ALTER TABLE study_materials ADD COLUMN IF NOT EXISTS storage_url TEXT;
 
--- 3. Add embedding column to material_chunks (768 dims = text-embedding-004)
-ALTER TABLE material_chunks ADD COLUMN IF NOT EXISTS embedding vector(768);
+-- 3. Add embedding column to material_chunks (384 dims)
+ALTER TABLE material_chunks ADD COLUMN IF NOT EXISTS embedding vector(384);
 
 -- 4. Create HNSW index for fast cosine similarity search
 CREATE INDEX IF NOT EXISTS material_chunks_embedding_idx
