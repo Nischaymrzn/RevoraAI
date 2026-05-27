@@ -1,7 +1,6 @@
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 
 from database import engine, Base
 import models
@@ -17,9 +16,20 @@ app = FastAPI(
     version="1.0.0",
 )
 
+# Build allowed origins: always include local dev, add FRONTEND_URL from env
+# (set FRONTEND_URL to your Vercel deployment URL on Render)
+_base_origins = [
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:5173",
+]
+_frontend_url = os.getenv("FRONTEND_URL", "")
+_allowed_origins = _base_origins + ([_frontend_url] if _frontend_url else [])
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173"],
+    allow_origins=_allowed_origins,
+    allow_origin_regex=r"https://.*\.vercel\.app",  # allow all Vercel preview URLs
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

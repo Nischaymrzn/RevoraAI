@@ -330,6 +330,68 @@ def summarize_material(
     return {"summary": summary}
 
 
+@router.post("/{material_id}/flashcards")
+def generate_flashcards(
+    material_id: int,
+    count: int = 15,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    from services.ai_client import generate as ai_generate
+    import json, re
+
+    m = db.query(models.StudyMaterial).filter(
+        models.StudyMaterial.id == material_id,
+        models.StudyMaterial.user_id == current_user.id,
+    ).first()
+    if not m:
+        raise HTTPException(status_code=404, detail="Material not found")
+    if m.processing_status != "completed":
+        raise HTTPException(status_code=400, detail="Material is still being processed")
+
+    chunks = db.query(models.MaterialChunk).filter(models.MaterialChunk.material_id == material_id).all()
+    content = " ".join([c.chunk_text for c in chunks[:30]])[:8000]
+
+    prompt = f"""You are an expert study tool. Generate exactly {count} flashcards from the following study material.
+
+Study Material:
+{content}
+
+Rules:
+- Front: a concise question, term, or concept (max 20 words)
+- Back: a clear, complete answer or definition (max 60 words)
+- Cover the most important and testable concepts
+- Include a mix of definitions, key facts, processes, and application questions
+- topic: a short topic label (2-4 words)
+- hint: one brief hint (max 10 words) to nudge the student if they're stuck
+
+Return ONLY valid JSON in this format:
+{{
+  "flashcards": [
+    {{
+      "front": "What is X?",
+      "back": "X is ...",
+      "topic": "Topic name",
+      "hint": "Think about Y"
+    }}
+  ]
+}}
+
+Generate {count} flashcards now:"""
+
+    try:
+        raw = ai_generate(prompt, temperature=0.4, large=False)
+        # extract JSON
+        match = re.search(r'\{[\s\S]*\}', raw)
+        if not match:
+            raise HTTPException(status_code=500, detail="Failed to parse flashcards")
+        data = json.loads(match.group())
+        cards = data.get("flashcards", [])[:count]
+        return {"flashcards": cards, "material_name": m.original_name}
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, detail="Failed to generate flashcards. Please try again.")
+
+
 @router.delete("/{material_id}")
 def delete_material(
     material_id: int,

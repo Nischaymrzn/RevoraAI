@@ -271,10 +271,11 @@ def submit_attempt(
     )
     db.add(attempt)
 
+    is_mock = (quiz.quiz_type == 'mock_test')
     event = models.ActivityEvent(
         user_id=current_user.id,
-        event_type="quiz_attempt",
-        description=f"Completed quiz: {quiz.title} — {result['score_percentage']}%",
+        event_type="mock_attempt" if is_mock else "quiz_attempt",
+        description=f"Completed {'mock test' if is_mock else 'quiz'}: {quiz.title} — {result['score_percentage']}%",
         event_metadata={"quiz_id": req.quiz_id, "score": result["score_percentage"]},
     )
     db.add(event)

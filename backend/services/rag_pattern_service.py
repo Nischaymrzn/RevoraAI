@@ -19,11 +19,6 @@ from services.vector_store import search_chunks
 from services.ai_client import generate
 import models
 
-
-# ── Topic probe queries per subject ──────────────────────────────────────────
-# These drive the semantic retrieval step.  Broad enough to find relevant
-# exam questions; narrow enough to keep topics distinct.
-
 SUBJECT_PROBES: Dict[str, Dict[str, str]] = {
     "Computer Science": {
         "Database & SQL":         "database SQL DDL DML normalization primary key foreign key query join",
@@ -70,8 +65,6 @@ GENERIC_PROBES = {
     "Higher Order":       "analyze evaluate discuss critically assess",
 }
 
-
-# ── RAG pattern analysis ──────────────────────────────────────────────────────
 
 def analyze_papers_rag(
     db: Session,
@@ -142,8 +135,7 @@ def analyze_papers_rag(
     if not topic_retrieved:
         return _fallback_analysis()
 
-    # 4. Compute REAL pattern statistics algorithmically
-    # ─────────────────────────────────────────────────────────────────────────
+    # 4. Compute REAL pattern
     # For each topic we now know exactly which papers returned chunks and
     # at what average relevance score — no LLM estimation needed.
     topic_stats: Dict[str, Dict] = {}
