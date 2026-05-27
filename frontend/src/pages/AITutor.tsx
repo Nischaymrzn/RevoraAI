@@ -217,7 +217,7 @@ interface VivaScreenProps {
   onCancel: () => void;
 }
 
-function VivaScreen({ materialName, materialIds, questions, userName, userInitials, onComplete, onCancel }: VivaScreenProps) {
+function VivaScreen({ materialName, materialIds: _materialIds, questions, userName, userInitials, onComplete, onCancel }: VivaScreenProps) {
   type CS = 'idle' | 'connecting' | 'active' | 'ended' | 'analyzing';
   const vapiRef       = useRef<{ stop: () => void } | null>(null);
   const turnsBuf      = useRef<VivaTurn[]>([]);
@@ -304,7 +304,7 @@ function VivaScreen({ materialName, materialIds, questions, userName, userInitia
     setCs('connecting');
     try {
       const mod = await import('@vapi-ai/web');
-      const Vapi = (mod as { default: new (k: string) => { start: (c: object) => Promise<void>; stop: () => void; on: (e: string, cb: (...a: unknown[]) => void) => void } }).default;
+      const Vapi = (mod as unknown as { default: new (k: string) => { start: (c: object) => Promise<unknown>; stop: () => void; on: (e: string, cb: (...a: unknown[]) => void) => void } }).default;
       const vapi = new Vapi(import.meta.env.VITE_VAPI_PUBLIC_KEY as string);
       vapiRef.current = vapi;
       vapi.on('call-start',   () => setCs('active'));
