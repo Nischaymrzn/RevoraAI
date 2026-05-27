@@ -1,35 +1,36 @@
 """
-Vector store using pgvector (PostgreSQL) + sentence-transformers (local embeddings).
+Vector store using pgvector (PostgreSQL) + Gemini API embeddings.
 
-Embeddings (384 dims, all-MiniLM-L6-v2) are stored directly in the
-material_chunks table. Similarity search uses cosine distance via pgvector's
-HNSW index — no external embedding API needed.
+Embeddings (384 dims via text-embedding-004 with output_dimensionality=384)
+are stored directly in the material_chunks table. Similarity search uses
+cosine distance via pgvector's HNSW index — no local model, no PyTorch.
 """
 
 from typing import List, Dict, Any, Optional
-from sentence_transformers import SentenceTransformer
-from config import EMBEDDING_MODEL
+import google.generativeai as genai
+from config import GEMINI_API_KEY, EMBEDDING_DIMS
 
-_model: Optional[SentenceTransformer] = None
+# Configure Gemini once at module load
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
 
-
-def _get_model() -> SentenceTransformer:
-    global _model
-    if _model is None:
-        _model = SentenceTransformer(EMBEDDING_MODEL)
-    return _model
+_EMBED_MODEL = "models/text-embedding-004"
 
 
 def embed_text(text: str, task_type: str = "retrieval_document") -> List[float]:
     """
-    Embed a single text using sentence-transformers.
-    Returns a list of 384 floats.
-    task_type is kept as a parameter for API compatibility but is ignored
-    (sentence-transformers uses the same model for both indexing and querying).
+    Embed a single text using Gemini text-embedding-004.
+    Returns a list of EMBEDDING_DIMS (384) floats.
+
+    task_type: "retrieval_document" when indexing, "retrieval_query" when searching.
     """
-    model = _get_model()
-    embedding = model.encode(text, normalize_embeddings=True)
-    return embedding.tolist()
+    result = genai.embed_content(
+        model=_EMBED_MODEL,
+        content=text,
+        task_type=task_type,
+        output_dimensionality=EMBEDDING_DIMS,
+    )
+    return result["embedding"]
 
 
 def search_chunks(
@@ -47,6 +48,7 @@ def search_chunks(
     Filters:
       - user_id:       always applied (user isolation)
       - material_id:   narrow to a specific document
+      - material_ids:  narrow to a list of documents
       - material_type: narrow by type (past_paper / lesson / notes / textbook)
 
     Returns list of dicts: {text, material_id, chunk_index, relevance}
@@ -54,7 +56,7 @@ def search_chunks(
     import models
 
     try:
-        query_embedding = embed_text(query)
+        query_embedding = embed_text(query, task_type="retrieval_query")
     except Exception:
         return []
 
