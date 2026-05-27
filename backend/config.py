@@ -23,8 +23,7 @@ MAX_FILE_SIZE_MB = 50
 CHUNK_SIZE = 800
 CHUNK_OVERLAP = 100
 
-EMBEDDING_MODEL = "all-MiniLM-L6-v2"
-EMBEDDING_DIMS = 384
+EMBEDDING_DIMS = 384  # Gemini text-embedding-004 with output_dimensionality=384
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL = "llama-3.1-8b-instant"             
