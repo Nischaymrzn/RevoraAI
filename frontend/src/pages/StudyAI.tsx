@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   PieChart, Pie, Cell,
@@ -8,9 +8,10 @@ import {
   ResponsiveContainer, Label,
 } from 'recharts';
 import {
-  ClipboardList, Timer, AlertCircle, BarChart2, GraduationCap,
+  ClipboardList, Timer, AlertCircle, BarChart2,
   Loader2, CheckCircle, XCircle,
   ChevronRight, ChevronLeft, ArrowLeft, RefreshCw, FolderOpen, BookOpen, History, Layers,
+  type LucideIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { materialsApi, qaApi, quizzesApi, mockTestsApi, coursesApi } from '../services/api';
@@ -65,17 +66,6 @@ function ScoreTag({ score }: { score: number }) {
     score >= 40 ? 'text-orange-600 bg-orange-50' :
     'text-red-600 bg-red-50';
   return <span className={cn('text-[11.5px] font-semibold px-2 py-0.5 rounded-md', cls)}>{score}%</span>;
-}
-
-function ScoreBar({ value }: { value: number }) {
-  return (
-    <div className="h-1.5 bg-green-50 rounded-full overflow-hidden">
-      <div
-        className="h-full bg-green-400 rounded-full transition-all duration-700"
-        style={{ width: `${Math.min(value, 100)}%` }}
-      />
-    </div>
-  );
 }
 
 
@@ -232,7 +222,7 @@ function AnalysisResult({
                     <Label content={<DonutCenter />} position="center" />
                   </Pie>
                   <RechartsTip
-                    formatter={(v: number, name: string) => [`${v} questions`, name]}
+                    formatter={(v: any, name: any) => [`${v ?? 0} questions`, name]}
                     contentStyle={TIP_STYLE}
                   />
                   <Legend
@@ -254,7 +244,7 @@ function AnalysisResult({
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#F3F4F6" />
                   <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11, fill: '#9CA3AF' }} tickLine={false} axisLine={false} unit="%" />
                   <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: '#6B7280' }} tickLine={false} axisLine={false} width={88} />
-                  <RechartsTip formatter={(v: number) => [`${v}%`, 'Coverage']} contentStyle={TIP_STYLE} />
+                  <RechartsTip formatter={(v: any) => [`${v ?? 0}%`, 'Coverage']} contentStyle={TIP_STYLE} />
                   <Bar dataKey="value" fill="#6DEB74" radius={[0, 4, 4, 0]} maxBarSize={14} />
                 </BarChart>
               </ResponsiveContainer>
@@ -279,7 +269,7 @@ function AnalysisResult({
                   <PolarRadiusAxis angle={90} domain={[0, 100]} tick={false} axisLine={false} />
                   <Radar dataKey="value" stroke="#22C55E" fill="#22C55E" fillOpacity={0.15} strokeWidth={2}
                     dot={{ fill: '#22C55E', r: 3 } as any} />
-                  <RechartsTip formatter={(v: number) => [v, 'Importance']} contentStyle={TIP_STYLE} />
+                  <RechartsTip formatter={(v: any) => [v ?? 0, 'Importance']} contentStyle={TIP_STYLE} />
                 </RadarChart>
               </ResponsiveContainer>
             </div>
@@ -297,8 +287,8 @@ function AnalysisResult({
                     angle={-30} textAnchor="end" interval={0} />
                   <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: '#9CA3AF' }} tickLine={false} axisLine={false} unit="%" />
                   <RechartsTip
-                    formatter={(v: number, _: any, props: any) =>
-                      [`${v}% (${props.payload.papers}/${props.payload.total} papers)`, 'Consistency']}
+                    formatter={(v: any, _: any, props: any) =>
+                      [`${v ?? 0}% (${props.payload.papers}/${props.payload.total} papers)`, 'Consistency']}
                     contentStyle={TIP_STYLE}
                   />
                   <Bar dataKey="value" radius={[4, 4, 0, 0]} maxBarSize={44}>
@@ -458,7 +448,7 @@ function EmptyState({
   title,
   sub,
 }: {
-  icon: React.ComponentType<{ size?: number; className?: string }>;
+  icon: LucideIcon;
   title: string;
   sub: string;
 }) {
