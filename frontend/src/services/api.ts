@@ -76,6 +76,8 @@ export const qaApi = {
       material_id: materialId,
       material_ids: materialIds && materialIds.length > 0 ? materialIds : undefined,
     }),
+  grade: (prompt: string) =>
+    api.post('/api/qa/grade', { prompt }),
   history: (limit = 20) => api.get(`/api/qa/history?limit=${limit}`),
   analyzePatterns: (materialId: number) =>
     api.post('/api/qa/analyze-patterns', { material_id: materialId }),

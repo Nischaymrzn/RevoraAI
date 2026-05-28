@@ -5,7 +5,6 @@ import {
   TrendingUp, AlertTriangle, ChevronRight, Plus,
 } from 'lucide-react';
 import { analyticsApi, materialsApi } from '../services/api';
-import { useAuthStore } from '../store/authStore';
 import { StudyMaterial } from '../types';
 import { Skeleton } from '../components/ui/skeleton';
 import { cn } from '../lib/utils';
@@ -27,11 +26,11 @@ function formatSize(bytes: number) {
 }
 
 const FILE_COLORS: Record<string, string> = {
-  '.pdf':  'bg-red-50 text-red-500',
-  '.docx': 'bg-blue-50 text-blue-500',
-  '.doc':  'bg-blue-50 text-blue-500',
-  '.pptx': 'bg-orange-50 text-orange-500',
-  '.txt':  'bg-gray-100 text-gray-500',
+  '.pdf':  'bg-zinc-900 text-white',
+  '.docx': 'bg-zinc-100 text-zinc-600',
+  '.doc':  'bg-zinc-100 text-zinc-600',
+  '.pptx': 'bg-zinc-100 text-zinc-600',
+  '.txt':  'bg-zinc-100 text-zinc-500',
 };
 
 function DashboardSkeleton() {
@@ -66,7 +65,7 @@ function StatCard({ label, value, sub, icon: Icon }: {
 }
 
 export default function Dashboard() {
-  const { user } = useAuthStore();
+
   const [dashboard, setDashboard] = useState<any>(null);
   const [readiness, setReadiness] = useState<any>(null);
   const [materials, setMaterials] = useState<StudyMaterial[]>([]);
@@ -90,15 +89,11 @@ export default function Dashboard() {
   const pending  = materials.filter((m) => ['pending', 'processing'].includes(m.processing_status));
   const recent   = materials.slice(0, 5);
 
-  const hour      = new Date().getHours();
-  const greeting  = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
-  const firstName = user?.name?.split(' ')[0] ?? 'there';
-
   const readinessScore = stats.readiness_score || 0;
   const readinessColor =
     readinessScore >= 70 ? '#16a34a' :
-    readinessScore >= 40 ? '#f97316' :
-    readinessScore > 0   ? '#ef4444' : '#D1D5DB';
+    readinessScore >= 40 ? '#3f3f46' :
+    readinessScore > 0   ? '#18181b' : '#D1D5DB';
   const readinessLabel =
     readinessScore >= 70 ? 'Exam Ready' :
     readinessScore >= 40 ? 'Partially Ready' :
@@ -109,12 +104,8 @@ export default function Dashboard() {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-[30px] font-bold text-gray-900">{greeting}, {firstName}</h1>
-          <p className="text-[15.5px] text-gray-500 mt-1.5">
-            {stats.materials_count > 0
-              ? `${stats.materials_count} materials · ${stats.processed_count || 0} ready · ${stats.questions_asked || 0} AI questions`
-              : 'Upload your first material to unlock AI features'}
-          </p>
+          <h1 className="text-[30px] font-bold text-gray-900">Dashboard</h1>
+          <p className="text-[15.5px] text-gray-500 mt-1.5">Your personalized study dashboard</p>
         </div>
         <Link
           to="/materials"
@@ -127,12 +118,12 @@ export default function Dashboard() {
 
       {/* Alert: pending processing */}
       {pending.length > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-3.5 flex items-center gap-3">
-          <AlertTriangle size={17} className="text-amber-500 flex-shrink-0" />
-          <p className="text-[14.5px] text-amber-800 font-medium">
+        <div className="bg-zinc-50 border border-zinc-200 rounded-xl px-5 py-3.5 flex items-center gap-3">
+          <AlertTriangle size={17} className="text-zinc-500 flex-shrink-0" />
+          <p className="text-[14.5px] text-zinc-700 font-medium">
             {pending.length} material{pending.length > 1 ? 's' : ''} being processed — they'll be ready shortly
           </p>
-          <Link to="/materials" className="ml-auto text-[13px] font-semibold text-amber-700 hover:underline">View →</Link>
+          <Link to="/materials" className="ml-auto text-[13px] font-semibold text-zinc-600 hover:underline">View →</Link>
         </div>
       )}
 
@@ -192,9 +183,9 @@ export default function Dashboard() {
                   <span className={cn(
                     'text-[11.5px] font-semibold px-2.5 py-0.5 rounded-full flex-shrink-0',
                     m.processing_status === 'completed'  ? 'bg-green-100 text-green-700' :
-                    m.processing_status === 'processing' ? 'bg-amber-100 text-amber-600' :
-                    m.processing_status === 'failed'     ? 'bg-red-100 text-red-600'     :
-                    'bg-gray-100 text-gray-500'
+                    m.processing_status === 'processing' ? 'bg-zinc-100 text-zinc-600'   :
+                    m.processing_status === 'failed'     ? 'bg-zinc-100 text-zinc-700'   :
+                    'bg-zinc-100 text-zinc-500'
                   )}>
                     {m.processing_status === 'completed'  ? 'Ready'      :
                      m.processing_status === 'processing' ? 'Processing' :
@@ -230,9 +221,9 @@ export default function Dashboard() {
               </div>
               <span className={cn(
                 'text-[11.5px] font-semibold px-2.5 py-0.5 rounded-full mt-1',
-                readinessScore >= 70 ? 'bg-green-100 text-green-700'   :
-                readinessScore >= 40 ? 'bg-orange-100 text-orange-600' :
-                readinessScore > 0   ? 'bg-red-100 text-red-600'       : 'bg-gray-100 text-gray-500'
+                readinessScore >= 70 ? 'bg-green-100 text-green-700' :
+                readinessScore >= 40 ? 'bg-zinc-100 text-zinc-700'   :
+                readinessScore > 0   ? 'bg-zinc-100 text-zinc-700'   : 'bg-zinc-100 text-zinc-500'
               )}>
                 {readinessLabel}
               </span>

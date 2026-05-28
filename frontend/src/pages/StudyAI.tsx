@@ -63,34 +63,34 @@ function Btn({
 function ScoreTag({ score }: { score: number }) {
   const cls =
     score >= 70 ? 'text-green-700 bg-green-50' :
-    score >= 40 ? 'text-orange-600 bg-orange-50' :
-    'text-red-600 bg-red-50';
+      score >= 40 ? 'text-orange-600 bg-orange-50' :
+        'text-red-600 bg-red-50';
   return <span className={cn('text-[11.5px] font-semibold px-2 py-0.5 rounded-md', cls)}>{score}%</span>;
 }
 
 
 /* ── Chart constants ─────────────────────────────────────────────────────────── */
 const TYPE_COLORS: Record<string, string> = {
-  mcq:          '#6DEB74',   // system primary green
+  mcq: '#6DEB74',   // system primary green
   short_answer: '#10B981',   // emerald
-  long_answer:  '#F59E0B',   // amber (warm contrast)
-  code:         '#14B8A6',   // teal
-  theory:       '#22C55E',   // green-500
-  numerical:    '#84CC16',   // lime
-  diagram:      '#34D399',   // emerald-400
-  unknown:      '#94A3B8',   // slate neutral
+  long_answer: '#F59E0B',   // amber (warm contrast)
+  code: '#14B8A6',   // teal
+  theory: '#22C55E',   // green-500
+  numerical: '#84CC16',   // lime
+  diagram: '#34D399',   // emerald-400
+  unknown: '#94A3B8',   // slate neutral
 };
 const TYPE_LABELS: Record<string, string> = {
-  mcq:          'MCQ',
+  mcq: 'MCQ',
   short_answer: 'Short Answer',
-  long_answer:  'Long Answer',
-  code:         'Code',
-  theory:       'Theory',
-  numerical:    'Numerical',
-  diagram:      'Diagram',
-  unknown:      'Other',
+  long_answer: 'Long Answer',
+  code: 'Code',
+  theory: 'Theory',
+  numerical: 'Numerical',
+  diagram: 'Diagram',
+  unknown: 'Other',
 };
-const PALETTE = ['#6DEB74','#10B981','#F59E0B','#14B8A6','#22C55E','#84CC16','#34D399','#94A3B8'];
+const PALETTE = ['#6DEB74', '#10B981', '#F59E0B', '#14B8A6', '#22C55E', '#84CC16', '#34D399', '#94A3B8'];
 
 /* ── Shared tooltip style ───────────────────────────────────────────────────── */
 const TIP_STYLE = { fontSize: 12, borderRadius: 8, border: '1px solid #E5E7EB', boxShadow: '0 2px 8px rgba(0,0,0,0.07)' };
@@ -107,9 +107,9 @@ function AnalysisResult({
   toggleCluster: (idx: number) => void;
   paperLabel: (id: number) => string;
 }) {
-  const freq       = analysis.question_type_frequency ?? {};
-  const breakdown  = analysis.section_breakdown       ?? {};
-  const topics     = analysis.main_topics             ?? [];
+  const freq = analysis.question_type_frequency ?? {};
+  const breakdown = analysis.section_breakdown ?? {};
+  const topics = analysis.main_topics ?? [];
   const totalPapers = analysis.papers_analyzed?.length ?? 1;
 
   /* ── Data transforms ─────────────────────────────────────────────────── */
@@ -142,19 +142,21 @@ function AnalysisResult({
   }));
 
   // 4. Vertical bar — question type consistency (% papers)
-  const ORDER = ['mcq','short_answer','long_answer','code','theory','numerical','diagram','unknown'];
+  const ORDER = ['mcq', 'short_answer', 'long_answer', 'code', 'theory', 'numerical', 'diagram', 'unknown'];
   const consistencyData = [
     ...ORDER.filter(k => freq[k]),
     ...Object.keys(freq).filter(k => !ORDER.includes(k)),
   ].map((k, i) => ({
-    name:   TYPE_LABELS[k] ?? k,
-    value:  freq[k].pct,
+    name: TYPE_LABELS[k] ?? k,
+    value: freq[k].pct,
     papers: freq[k].papers,
-    total:  freq[k].total_papers,
-    fill:   TYPE_COLORS[k] ?? PALETTE[i % PALETTE.length],
+    total: freq[k].total_papers,
+    fill: TYPE_COLORS[k] ?? PALETTE[i % PALETTE.length],
   }));
 
   const topType = [...consistencyData].sort((a, b) => b.value - a.value)[0];
+
+  console.log(consistencyData)
 
   // Custom donut center label
   const DonutCenter = ({ viewBox }: any) => {
@@ -315,7 +317,7 @@ function AnalysisResult({
                     <p className="text-[13px] text-gray-700 leading-snug">{q.question}</p>
                     <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                       {q.topic && <span className="text-[10.5px] text-gray-400">{q.topic}</span>}
-                      {q.type && <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded capitalize">{q.type.replace('_',' ')}</span>}
+                      {q.type && <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded capitalize">{q.type.replace('_', ' ')}</span>}
                       {q.marks != null && <span className="text-[10px] bg-green-50 text-green-700 px-1.5 py-0.5 rounded">{q.marks}m</span>}
                       {q.appears_in_papers != null && <span className="text-[10px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded">{q.appears_in_papers} papers</span>}
                     </div>
@@ -343,7 +345,7 @@ function AnalysisResult({
               <ol className="space-y-2">
                 {analysis.revision_priority.map((p, i) => (
                   <li key={i} className="flex items-start gap-2.5 text-[13px] text-gray-700">
-                    <span className="w-5 h-5 bg-green-50 text-green-700 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 mt-0.5">{i+1}</span>
+                    <span className="w-5 h-5 bg-green-50 text-green-700 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 mt-0.5">{i + 1}</span>
                     {p}
                   </li>
                 ))}
@@ -831,7 +833,7 @@ function QuizPanel({ materials }: { materials: StudyMaterial[] }) {
     quizzesApi.list().then((res) =>
       setQuizzes((res.data as Array<{ id: number; title: string; quiz_type: string; questions_count: number; best_score: number }>)
         .filter((q) => q.quiz_type !== 'mock_test'))
-    ).catch(() => {});
+    ).catch(() => { });
   };
 
   useEffect(() => {
@@ -1091,10 +1093,10 @@ function QuizPanel({ materials }: { materials: StudyMaterial[] }) {
 
 function MockPanel({ materials }: { materials: StudyMaterial[] }) {
   const navigate = useNavigate();
-  const [view, setView]         = useState<'list' | 'create'>('list');
-  const [mocks, setMocks]       = useState<Array<{ id: number; title: string; questions_count: number; time_limit: number; attempt_count: number; best_score: number }>>([]);
+  const [view, setView] = useState<'list' | 'create'>('list');
+  const [mocks, setMocks] = useState<Array<{ id: number; title: string; questions_count: number; time_limit: number; attempt_count: number; best_score: number }>>([]);
   const [selectedMats, setSelectedMats] = useState<number[]>([]);
-  const [cfg, setCfg]           = useState({ title: 'Mock Test', count: 10 });
+  const [cfg, setCfg] = useState({ title: 'Mock Test', count: 10 });
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
 
@@ -1103,7 +1105,7 @@ function MockPanel({ materials }: { materials: StudyMaterial[] }) {
   const loadMocks = () => {
     mockTestsApi.list()
       .then((res) => setMocks(res.data))
-      .catch(() => {});
+      .catch(() => { });
   };
 
   useEffect(() => { loadMocks(); }, []);
@@ -1212,7 +1214,7 @@ function MockPanel({ materials }: { materials: StudyMaterial[] }) {
 
 // ── FlashcardsPanel ──────────────────────────────────────────────────────────
 
-interface Flashcard     { front: string; back: string; hint?: string }
+interface Flashcard { front: string; back: string; hint?: string }
 interface FlashcardDeck { id: string; ts: number; materialName: string; materialId: number; count: number; cards: Flashcard[]; }
 const FC_KEY = 'revora_flashcard_decks';
 const MAX_FC = 15;
@@ -1224,14 +1226,14 @@ function FlashcardsPanel({ materials }: { materials: StudyMaterial[] }) {
     try { return JSON.parse(localStorage.getItem(FC_KEY) || '[]'); } catch { return []; }
   });
   const [selectedId, setSelectedId] = useState<number>(ready[0]?.id ?? 0);
-  const [count, setCount]           = useState(10);
-  const [loading, setLoading]       = useState(false);
-  const [error, setError]           = useState('');
+  const [count, setCount] = useState(10);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [activeDeck, setActiveDeck] = useState<FlashcardDeck | null>(null);
-  const [cardIdx, setCardIdx]       = useState(0);
-  const [flipped, setFlipped]       = useState(false);
-  const [showHint, setShowHint]     = useState(false);
-  const [known, setKnown]           = useState<Set<number>>(new Set());
+  const [cardIdx, setCardIdx] = useState(0);
+  const [flipped, setFlipped] = useState(false);
+  const [showHint, setShowHint] = useState(false);
+  const [known, setKnown] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     if (!selectedId && ready.length > 0) setSelectedId(ready[0].id);
@@ -1282,8 +1284,8 @@ function FlashcardsPanel({ materials }: { materials: StudyMaterial[] }) {
     if (activeDeck && cardIdx < activeDeck.cards.length - 1) goTo(cardIdx + 1);
   };
 
-  const card     = activeDeck?.cards[cardIdx];
-  const total    = activeDeck?.cards.length ?? 0;
+  const card = activeDeck?.cards[cardIdx];
+  const total = activeDeck?.cards.length ?? 0;
   const progress = total > 0 ? Math.round((known.size / total) * 100) : 0;
   const allKnown = total > 0 && known.size === total;
 
@@ -1448,9 +1450,9 @@ function FlashcardsPanel({ materials }: { materials: StudyMaterial[] }) {
           <div className="text-center">
             {!showHint
               ? <button onClick={() => setShowHint(true)}
-                  className="text-[13px] text-gray-400 hover:text-gray-600 underline underline-offset-2 transition-colors">
-                  Show hint
-                </button>
+                className="text-[13px] text-gray-400 hover:text-gray-600 underline underline-offset-2 transition-colors">
+                Show hint
+              </button>
               : <p className="text-[14px] text-gray-500 italic">💡 {card.hint}</p>
             }
           </div>

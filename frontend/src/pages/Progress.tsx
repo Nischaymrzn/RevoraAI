@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { TrendingUp, Target, AlertTriangle, CheckCircle, Award, FolderOpen, Activity } from 'lucide-react';
+import { CheckCircle } from 'lucide-react';
 import { analyticsApi } from '../services/api';
 import { Progress as ProgressBar } from '../components/ui/progress';
 import { Skeleton } from '../components/ui/skeleton';
@@ -129,16 +129,16 @@ export default function Progress() {
   const readinessScore = stats.readiness_score || 0;
   const readinessColor =
     readinessScore >= 70 ? '#16a34a' :
-    readinessScore >= 40 ? '#f97316' :
-    readinessScore > 0   ? '#ef4444' : '#D1D5DB';
+    readinessScore >= 40 ? '#3f3f46' :
+    readinessScore > 0   ? '#18181b' : '#D1D5DB';
   const readinessLabel =
     readinessScore >= 70 ? 'Exam Ready'      :
     readinessScore >= 40 ? 'Partially Ready' :
     readinessScore > 0   ? 'Needs Work'      : 'Not assessed';
   const readinessBadge =
-    readinessScore >= 70 ? 'bg-green-100 text-green-700'   :
-    readinessScore >= 40 ? 'bg-orange-100 text-orange-600' :
-    readinessScore > 0   ? 'bg-red-100 text-red-600'       : 'bg-gray-100 text-gray-500';
+    readinessScore >= 70 ? 'bg-green-100 text-green-700' :
+    readinessScore >= 40 ? 'bg-zinc-100 text-zinc-700'   :
+    readinessScore > 0   ? 'bg-zinc-100 text-zinc-700'   : 'bg-zinc-100 text-zinc-500';
 
   const allScores = [
     ...(progress?.quiz_trend || []).map((t: any) => t.score),
@@ -189,16 +189,11 @@ export default function Progress() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {/* Readiness gauge */}
         <div className="bg-white rounded-xl border border-border p-7">
-          <div className="flex items-center gap-2 mb-6">
-            <Target size={17} className="text-gray-400" />
-            <h3 className="font-semibold text-gray-900 text-[16px]">Exam Readiness</h3>
-          </div>
-          <div className="flex flex-col items-center">
-            <div className="relative w-48 h-[96px] overflow-hidden mb-2">
+          <h3 className="font-semibold text-gray-900 text-[16px] mb-5">Exam Readiness</h3>
+          <div className="flex flex-col items-center gap-3">
+            <div className="relative w-48 h-[96px] overflow-hidden">
               <svg viewBox="0 0 176 88" className="w-full">
-                {/* Background arc */}
                 <path d="M 12 88 A 76 76 0 0 1 164 88" fill="none" stroke="#F0F2F5" strokeWidth="13" strokeLinecap="round" />
-                {/* Filled arc — always show, opacity reflects score */}
                 <path
                   d="M 12 88 A 76 76 0 0 1 164 88"
                   fill="none" stroke={readinessScore > 0 ? readinessColor : '#E5E7EB'}
@@ -206,7 +201,6 @@ export default function Progress() {
                   strokeDasharray={`${(readinessScore / 100) * 239} 239`}
                   style={{ transition: 'stroke-dasharray 1.2s ease' }}
                 />
-                {/* Needle */}
                 <line
                   x1="88" y1="88"
                   x2={88 + 58 * Math.cos((((readinessScore / 100) * 180 - 180) * Math.PI) / 180)}
@@ -216,10 +210,10 @@ export default function Progress() {
                 <circle cx="88" cy="88" r="5" fill={readinessScore > 0 ? readinessColor : '#D1D5DB'} />
               </svg>
             </div>
-            <p className="text-[44px] font-bold mt-1 leading-none" style={{ color: readinessScore > 0 ? readinessColor : '#9CA3AF' }}>
+            <p className="text-[44px] font-bold leading-none" style={{ color: readinessScore > 0 ? readinessColor : '#9CA3AF' }}>
               {readinessScore > 0 ? `${readinessScore}%` : '—'}
             </p>
-            <span className={cn('text-[12px] font-semibold px-3 py-0.5 rounded-full mt-2', readinessBadge)}>
+            <span className={cn('text-[12px] font-semibold px-3 py-0.5 rounded-full', readinessBadge)}>
               {readinessLabel}
             </span>
           </div>
@@ -230,10 +224,7 @@ export default function Progress() {
 
         {/* Performance */}
         <div className="bg-white rounded-xl border border-border p-7">
-          <div className="flex items-center gap-2 mb-6">
-            <TrendingUp size={17} className="text-gray-400" />
-            <h3 className="font-semibold text-gray-900 text-[16px]">Performance Breakdown</h3>
-          </div>
+          <h3 className="font-semibold text-gray-900 text-[16px] mb-6">Performance Breakdown</h3>
           <div className="space-y-5">
             <ScoreRow label="Overall average"   value={stats.avg_score      || 0} color="blue"   />
             <ScoreRow label="Quiz average"      value={stats.avg_quiz_score || 0} color="indigo" />
@@ -269,10 +260,7 @@ export default function Progress() {
 
       {/* Performance Radar */}
       <div className="bg-white rounded-xl border border-border p-6">
-        <div className="flex items-center gap-2 mb-5">
-          <Activity size={16} className="text-gray-400" />
-          <h3 className="font-semibold text-gray-900 text-[16px]">Performance Radar</h3>
-        </div>
+        <h3 className="font-semibold text-gray-900 text-[16px] mb-5">Performance Radar</h3>
         {hasAnyData ? (
           <div className="grid grid-cols-1 lg:grid-cols-[auto_1fr] gap-6 items-center">
             <div className="w-full max-w-[260px] mx-auto lg:mx-0">
@@ -311,10 +299,7 @@ export default function Progress() {
       {/* Strengths & Areas to improve */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <div className="bg-white rounded-xl border border-border p-6">
-          <div className="flex items-center gap-2 mb-5">
-            <CheckCircle size={16} className="text-green-500" />
-            <h3 className="font-semibold text-gray-900 text-[16px]">Strengths</h3>
-          </div>
+          <h3 className="font-semibold text-gray-900 text-[16px] mb-5">Strengths</h3>
           {readiness?.strengths?.length > 0 ? (
             <div className="space-y-3">
               {readiness.strengths.map((s: string, i: number) => (
@@ -330,10 +315,7 @@ export default function Progress() {
         </div>
 
         <div className="bg-white rounded-xl border border-border p-6">
-          <div className="flex items-center gap-2 mb-5">
-            <AlertTriangle size={16} className="text-orange-400" />
-            <h3 className="font-semibold text-gray-900 text-[16px]">Areas to Improve</h3>
-          </div>
+          <h3 className="font-semibold text-gray-900 text-[16px] mb-5">Areas to Improve</h3>
           {(dashboard?.weak_topics?.length > 0 || readiness?.areas_to_improve?.length > 0) ? (
             <div className="space-y-3">
               {[...(dashboard?.weak_topics || []), ...(readiness?.areas_to_improve || [])].slice(0, 5).map((t: string, i: number) => (
@@ -352,10 +334,7 @@ export default function Progress() {
       {/* AI Study Plan */}
       {readiness?.study_plan?.length > 0 && (
         <div className="bg-white rounded-xl border border-border p-6">
-          <div className="flex items-center gap-2 mb-5">
-            <Award size={16} className="text-gray-400" />
-            <h3 className="font-semibold text-gray-900 text-[16px]">AI Study Plan</h3>
-          </div>
+          <h3 className="font-semibold text-gray-900 text-[16px] mb-5">AI Study Plan</h3>
           <div className="space-y-3">
             {readiness.study_plan.map((step: string, i: number) => (
               <div key={i} className="flex items-start gap-3.5">
@@ -371,10 +350,7 @@ export default function Progress() {
 
       {/* Materials summary */}
       <div className="bg-white rounded-xl border border-border p-6">
-        <div className="flex items-center gap-2 mb-5">
-          <FolderOpen size={16} className="text-gray-400" />
-          <h3 className="font-semibold text-gray-900 text-[16px]">Materials Summary</h3>
-        </div>
+        <h3 className="font-semibold text-gray-900 text-[16px] mb-5">Materials Summary</h3>
         <div className="grid grid-cols-3 gap-6 text-center">
           {[
             { label: 'Total uploaded',     value: stats.materials_count || 0, highlight: false },
