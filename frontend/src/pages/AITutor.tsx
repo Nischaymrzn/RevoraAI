@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Send, GraduationCap, Loader2,
-  Plus, Clock, Mic, PhoneOff, BarChart2, ChevronRight, ArrowLeft,
+  Plus, Clock, Mic, PhoneOff, BarChart2, ChevronRight, ArrowLeft, MessageSquare,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { materialsApi, qaApi } from '../services/api';
@@ -48,10 +48,10 @@ function extractDetail(err: unknown, fb: string) {
   return typeof e?.response?.data?.detail === 'string' ? e.response!.data!.detail! : fb;
 }
 function gradeColor(pct: number) {
-  if (pct >= 75) return { text: '#15803d', bg: '#f0fdf4', border: '#bbf7d0' };
-  if (pct >= 60) return { text: '#b45309', bg: '#fffbeb', border: '#fde68a' };
-  if (pct >= 45) return { text: '#c2410c', bg: '#fff7ed', border: '#fed7aa' };
-  return { text: '#b91c1c', bg: '#fef2f2', border: '#fecaca' };
+  if (pct >= 75) return { text: '#15803d', bg: '#f0fdf4', border: '#bbf7d0' }; // green — keep
+  if (pct >= 60) return { text: '#18181b', bg: '#f4f4f5', border: '#d4d4d8' }; // zinc-900
+  if (pct >= 45) return { text: '#3f3f46', bg: '#f4f4f5', border: '#d4d4d8' }; // zinc-700
+  return        { text: '#18181b', bg: '#f4f4f5', border: '#d4d4d8' };         // zinc-900
 }
 function fmtDate(ts: number) {
   const d = new Date(ts), n = new Date();
@@ -245,9 +245,7 @@ function VivaScreen({ materialName, materialIds: _materialIds, questions, userNa
     setCs('analyzing');
     const transcript = turnsBuf.current;
 
-    // If the user ended immediately with no answers, return a zero score directly
-    // without calling the AI (which would otherwise use RAG context and return
-    // a score from the material rather than from the student's actual answers).
+    // If the user ended immediately with no answers, return zero score directly.
     const userTurnsInTranscript = transcript.filter(t => t.role === 'user');
     if (userTurnsInTranscript.length === 0) {
       const emptyPairs = questions.map(q => ({ question: q, answer: 'No answer provided' }));
@@ -255,19 +253,45 @@ function VivaScreen({ materialName, materialIds: _materialIds, questions, userNa
       return;
     }
 
-    // Group all user utterances between consecutive AI turns to form each answer.
-    // Deepgram sends multiple "final" events per answer (one per pause) so we
-    // concatenate all utterances that fall between examiner turn i and i+1.
-    const aiTurns = transcript.filter(t => t.role === 'ai');
-    const qaPairs = questions.map((q, qi) => {
-      const afterTs  = aiTurns[qi]?.ts ?? 0;
-      const beforeTs = aiTurns[qi + 1]?.ts ?? Infinity;
-      const answerTurns = transcript.filter(
-        t => t.role === 'user' && t.ts > afterTs && t.ts < beforeTs
-      );
-      const answer = answerTurns.map(t => t.text.trim()).filter(Boolean).join(' ');
-      return { question: q, answer: answer || 'No answer provided' };
-    });
+    // Build Q&A pairs by grouping transcript into role-switch exchanges.
+    //
+    // Deepgram sends AI speech as many short fragments (one per pause), so
+    // timestamp windows between individual AI turns are only ~50ms wide —
+    // user answers at 5+ seconds never fall inside them.
+    //
+    // Instead: group consecutive AI turns into one block, then collect all
+    // the user turns that follow until the next AI block. That forms one
+    // exchange per question, regardless of how many fragments Deepgram sent.
+    //
+    // Layout: [intro+Q1 AI block] [user answer 1] [Thank you+Q2 AI block] [user answer 2] ...
+    const exchanges: Array<{ userText: string }> = [];
+    let curUserText = '';
+    let inUserPhase = false;
+
+    for (const turn of transcript) {
+      if (turn.role === 'ai') {
+        if (inUserPhase) {
+          // Switched from user → AI: close current exchange, start fresh
+          exchanges.push({ userText: curUserText });
+          curUserText = '';
+          inUserPhase = false;
+        }
+        // accumulate AI fragments (we only need user text for grading)
+      } else {
+        inUserPhase = true;
+        curUserText += (curUserText ? ' ' : '') + turn.text;
+      }
+    }
+    // Push the last in-progress exchange
+    if (inUserPhase || curUserText) {
+      exchanges.push({ userText: curUserText });
+    }
+
+    // Map each question to the corresponding user answer block
+    const qaPairs = questions.map((q, qi) => ({
+      question: q,
+      answer: exchanges[qi]?.userText.trim() || 'No answer provided',
+    }));
 
     const qaBlock = qaPairs.map((p, i) =>
       `QUESTION ${i + 1}: ${p.question}\nSTUDENT ANSWER: ${p.answer}`
@@ -275,22 +299,27 @@ function VivaScreen({ materialName, materialIds: _materialIds, questions, userNa
 
     const prompt =
       `You are a rigorous academic viva examiner assessing a student on the topic: "${materialName}".\n\n` +
-      `The student was asked ${questions.length} formal examination questions. Here are the exact questions and the student's verbatim answers:\n\n` +
+      `The student was asked ${questions.length} questions. Below are the EXACT questions and the student's verbatim spoken answers:\n\n` +
       `${qaBlock}\n\n` +
-      `IMPORTANT: Base your grading ONLY on what the student actually said in their answers above. ` +
-      `If answers are empty or "No answer provided", give a score of 0 for those questions.\n\n` +
-      `Grade scale: Distinction (90-100) = exceptional, Merit (75-89) = strong with minor gaps, ` +
-      `Pass (60-74) = adequate with some gaps, Borderline (45-59) = basic but major gaps, Fail (0-44) = insufficient.\n\n` +
-      `Provide a rigorous, fair, detailed academic assessment. For each question, evaluate whether the answer is correct, complete, and demonstrates genuine understanding.\n\n` +
-      `Return ONLY valid JSON — no markdown, no text before or after:\n` +
-      `{"overallScore":72,"grade":"Merit","skills":{"Comprehension":7,"Communication":8,"Accuracy":7,"Depth":6,"Confidence":8},` +
-      `"questionBreakdown":[{"question":"exact question text","answer":"exact student answer","score":8,"feedback":"specific feedback: what was correct, what was missing or incorrect, and what would improve the answer"}],` +
-      `"summary":"2-3 sentence academic summary of overall performance","strengths":["specific strength 1","specific strength 2"],"areasForImprovement":["specific improvement area 1","specific improvement area 2"]}`;
+      `CRITICAL GRADING RULES:\n` +
+      `- Base your grade ONLY on the student's actual answers above. Do NOT assume knowledge they did not demonstrate.\n` +
+      `- If an answer is "No answer provided" or blank, that question scores 0.\n` +
+      `- A partial answer gets partial credit — do not round up generously.\n` +
+      `- Grade the ACTUAL answers, not what the student could have said.\n\n` +
+      `Grade scale (use the actual score to determine the label):\n` +
+      `90-100 = Distinction, 75-89 = Merit, 60-74 = Pass, 45-59 = Borderline, 0-44 = Fail\n\n` +
+      `Return ONLY valid JSON — no markdown, no extra text:\n` +
+      `{"overallScore":<integer 0-100 calculated from answers>,"grade":"<label matching score range>",` +
+      `"skills":{"Comprehension":<1-10>,"Communication":<1-10>,"Accuracy":<1-10>,"Depth":<1-10>,"Confidence":<1-10>},` +
+      `"questionBreakdown":[{"question":"<exact question>","answer":"<exact student answer>","score":<0-10>,"feedback":"<what was right, what was wrong, what was missing>"}],` +
+      `"summary":"<2-3 sentence honest academic summary of actual performance>",` +
+      `"strengths":["<genuine strength from answers>"],"areasForImprovement":["<specific gap from answers>"]}`;
 
     try {
-      // Do NOT pass materialIds — grading must be based purely on the student's
-      // answers, not RAG context, to prevent previous-session scores bleeding in.
-      const res = await qaApi.ask(prompt, undefined, undefined);
+      // Use the dedicated /grade endpoint — calls Gemini Flash directly with no
+      // RAG context added. This avoids Groq's 6 000 TPM cap that a long Q&A
+      // grading prompt would otherwise hit when sent through /ask.
+      const res = await qaApi.grade(prompt);
       const raw = res.data.answer as string;
       const jsonStr = extractJson(raw);
       const analysis = jsonStr ? JSON.parse(jsonStr) as VivaAnalysis : buildFallback(qaPairs);
@@ -575,8 +604,8 @@ function AnalysisView({ session }: { session: VivaSession }) {
           <div className="space-y-3">
             <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest px-1">Question-by-Question Breakdown</p>
             {analysis!.questionBreakdown.map((item, i) => {
-              const scoreColor = item.score >= 7 ? '#15803d' : item.score >= 5 ? '#b45309' : '#b91c1c';
-              const scoreBg   = item.score >= 7 ? '#f0fdf4' : item.score >= 5 ? '#fffbeb' : '#fef2f2';
+              const scoreColor = item.score >= 7 ? '#15803d' : item.score >= 5 ? '#3f3f46' : '#18181b';
+              const scoreBg   = item.score >= 7 ? '#f0fdf4' : item.score >= 5 ? '#f4f4f5' : '#f4f4f5';
               return (
                 <div key={i} className="bg-white border border-zinc-100 rounded-xl overflow-hidden">
                   {/* Q header */}
@@ -904,23 +933,23 @@ export default function AITutor() {
       const mat     = ready.find(m => m.id === selectedMats[0]);
       const matName = mat?.original_name ?? 'the material';
       const prompt =
-        `You are a university viva examiner creating formal examination questions for the topic: "${matName}".\n\n` +
-        `Generate exactly 5 viva examination questions. Requirements:\n` +
-        `- Questions must test deep conceptual understanding and application — NOT surface-level recall or memorisation\n` +
-        `- Use analytical question types: "Explain the significance of...", "How does X relate to Y...", "What would happen if...", "Compare and contrast...", "Critically evaluate..."\n` +
-        `- Each question should require a detailed, substantive answer (not yes/no)\n` +
-        `- Questions must be directly based on the specific content of the material\n` +
-        `- Questions should be suitable for a formal academic viva examination\n` +
-        `- Vary the topics covered — do not ask similar questions\n\n` +
-        `Return ONLY valid JSON — no markdown, no explanation, no text before or after:\n` +
-        `{"questions":["Question 1?","Question 2?","Question 3?","Question 4?","Question 5?"]}`;
+        `You are a viva examiner generating 3 spoken exam questions on: "${matName}".\n\n` +
+        `Requirements:\n` +
+        `- Questions must be SHORT and SIMPLE — easy to understand when heard aloud, not read\n` +
+        `- Keep each question under 20 words\n` +
+        `- Use plain, direct language: "What is...", "How does...", "Why is...", "Give an example of..."\n` +
+        `- Test understanding of core concepts from the material — avoid complex multi-part questions\n` +
+        `- Each question should be answerable in 30–60 seconds of spoken reply\n` +
+        `- Cover different topics — do not repeat similar ideas\n\n` +
+        `Return ONLY valid JSON — no markdown, no explanation:\n` +
+        `{"questions":["Short question 1?","Short question 2?","Short question 3?"]}`;
       const res = await qaApi.ask(prompt, undefined, selectedMats);
       const raw = res.data.answer as string;
       const jsonStr = extractJson(raw);
       if (!jsonStr) throw new Error('No JSON in response');
       const parsed = JSON.parse(jsonStr) as { questions: string[] };
       if (!parsed.questions?.length) throw new Error('No questions returned');
-      setVivaQuestions(parsed.questions.slice(0, 5));
+      setVivaQuestions(parsed.questions.slice(0, 3));
       setPhase('viva');
     } catch (err) { toast.error(extractDetail(err, 'Failed to generate viva questions')); }
     finally { setLessonLoading(false); }
@@ -1016,7 +1045,10 @@ export default function AITutor() {
                         onClick={() => { setActiveChatId(s.id); setChatMsgs(s.messages); setSelectedMats(s.materialIds ?? []); }}
                         className={cn('w-full text-left px-2 py-1.5 rounded-lg hover:bg-zinc-50 transition-colors',
                           activeChatId === s.id ? 'bg-zinc-100' : '')}>
-                        <p className="text-[11.5px] text-zinc-700 truncate">{s.title}</p>
+                        <div className="flex items-center gap-1.5">
+                          <MessageSquare size={10} className="text-zinc-400 flex-shrink-0" />
+                          <p className="text-[11.5px] text-zinc-700 truncate">{s.title}</p>
+                        </div>
                       </button>
                     ))}
                   </div>
@@ -1068,8 +1100,13 @@ export default function AITutor() {
                             onClick={() => setHistoryItem({ session: ts, viva })}
                             className={cn('w-full text-left px-2 py-1.5 rounded-lg transition-colors mb-0.5 hover:bg-zinc-50',
                               isActive ? 'bg-zinc-100' : '')}>
-                            <p className="text-[12.5px] font-medium text-zinc-700 truncate">{ts.materialName}</p>
-                            <div className="flex items-center gap-1.5 mt-0.5">
+                            <div className="flex items-center gap-1.5">
+                              {viva
+                                ? <Mic size={10} className="text-zinc-400 flex-shrink-0" />
+                                : <GraduationCap size={10} className="text-zinc-400 flex-shrink-0" />}
+                              <p className="text-[12.5px] font-medium text-zinc-700 truncate">{ts.materialName}</p>
+                            </div>
+                            <div className="flex items-center gap-1.5 mt-0.5 pl-[18px]">
                               <span className="text-[10px] text-zinc-400">{fmtDate(ts.ts)}</span>
                               {viva?.analysis
                                 ? <span className="text-[10px] font-bold" style={{ color: gradeColor(viva.analysis.overallScore).text }}>{viva.analysis.overallScore}%</span>

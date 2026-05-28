@@ -48,10 +48,10 @@ function FileChip({ ext }: { ext: string }) {
 
 function StatusPill({ status }: { status: string }) {
   const variants: Record<string, { cls: string; label: string; icon: any }> = {
-    completed:  { cls: 'bg-zinc-100 text-zinc-700',  label: 'Ready',      icon: CheckCircle },
-    processing: { cls: 'bg-zinc-100 text-zinc-600',  label: 'Processing', icon: Loader2     },
-    pending:    { cls: 'bg-zinc-100 text-zinc-500',  label: 'Pending',    icon: Clock       },
-    failed:     { cls: 'bg-red-50 text-red-600',     label: 'Failed',     icon: AlertCircle },
+    completed:  { cls: 'bg-zinc-100 text-zinc-700', label: 'Ready',      icon: CheckCircle },
+    processing: { cls: 'bg-zinc-100 text-zinc-600', label: 'Processing', icon: Loader2     },
+    pending:    { cls: 'bg-zinc-100 text-zinc-500', label: 'Pending',    icon: Clock       },
+    failed:     { cls: 'bg-zinc-100 text-zinc-700', label: 'Failed',     icon: AlertCircle },
   };
   const { cls, label, icon: Icon } = variants[status] || variants.pending;
   return (
@@ -420,11 +420,7 @@ export default function Materials() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-[30px] font-bold text-gray-900">Materials</h1>
-          <p className="text-[15.5px] text-gray-500 mt-1.5">
-            {materials.length === 0
-              ? 'Upload lecture notes, textbooks, past papers, or slides'
-              : `${materials.length} documents · ${completed} ready${inProgress > 0 ? ` · ${inProgress} processing` : ''}`}
-          </p>
+          <p className="text-[15.5px] text-gray-500 mt-1.5">Upload and manage your study documents</p>
         </div>
         <button
           onClick={() => fileRef.current?.click()}
@@ -437,10 +433,10 @@ export default function Materials() {
 
       {/* Error banner */}
       {error && (
-        <div className="flex items-center gap-2.5 bg-red-50 text-red-700 text-[13.5px] px-4 py-3 rounded-lg border border-red-200">
+        <div className="flex items-center gap-2.5 bg-zinc-50 text-zinc-700 text-[13.5px] px-4 py-3 rounded-lg border border-zinc-200">
           <AlertCircle size={15} className="flex-shrink-0" />
           {error}
-          <button onClick={() => setError('')} className="ml-auto text-red-400 hover:text-red-600">✕</button>
+          <button onClick={() => setError('')} className="ml-auto text-zinc-400 hover:text-zinc-600">✕</button>
         </div>
       )}
 
@@ -597,8 +593,8 @@ export default function Materials() {
               {/* Failed note */}
               {m.processing_status === 'failed' && (
                 <div className="px-5 pb-3 flex items-center gap-1.5">
-                  <AlertCircle size={12} className="text-red-400" />
-                  <p className="text-[12.5px] text-red-600">Processing failed — try re-uploading</p>
+                  <AlertCircle size={12} className="text-zinc-400" />
+                  <p className="text-[12.5px] text-zinc-500">Processing failed — try re-uploading</p>
                 </div>
               )}
 

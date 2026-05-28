@@ -22,6 +22,10 @@ class QuestionRequest(BaseModel):
     material_type: Optional[str] = None
 
 
+class GradeRequest(BaseModel):
+    prompt: str
+
+
 class PatternRequest(BaseModel):
     material_id: int
 
@@ -42,6 +46,37 @@ class AssessmentRequest(BaseModel):
 
 
 # ── AI Tutor ──────────────────────────────────────────────────────────────────
+
+@router.post("/grade")
+def grade_viva(
+    req: GradeRequest,
+    current_user: models.User = Depends(get_current_user),
+):
+    """
+    Direct LLM call for viva grading — bypasses RAG entirely.
+
+    Strategy:
+    1. Try Gemini Flash first — 1M token context, no per-minute TPM cap issues.
+    2. Fall back to Groq large model if Gemini is unavailable/failing.
+       With only 3 viva questions the prompt is ~1 500 tokens, well under Groq's limit.
+    Returns {"answer": <raw LLM text>} — same shape as /ask for easy client reuse.
+    """
+    from services.ai_client import generate_gemini, generate
+
+    # ── 1. Try Gemini ─────────────────────────────────────────────────────────
+    try:
+        answer = generate_gemini(req.prompt, temperature=0.3)
+        return {"answer": answer}
+    except Exception as gem_err:
+        print(f"[grade] Gemini failed ({gem_err}); falling back to Groq large")
+
+    # ── 2. Fall back to Groq large model ──────────────────────────────────────
+    try:
+        answer = generate(req.prompt, temperature=0.3, large=True)
+        return {"answer": answer}
+    except Exception as groq_err:
+        raise HTTPException(status_code=500, detail=f"Grading failed (both Gemini and Groq): {groq_err}")
+
 
 @router.post("/ask")
 def ask_question(

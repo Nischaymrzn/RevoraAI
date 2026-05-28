@@ -25,12 +25,14 @@ MIGRATIONS = [
     "ALTER TABLE study_materials ADD COLUMN IF NOT EXISTS storage_url TEXT",
 
     "ALTER TABLE material_chunks DROP COLUMN IF EXISTS embedding",
-    "ALTER TABLE material_chunks ADD COLUMN IF NOT EXISTS embedding vector(384)",
+    "ALTER TABLE material_chunks ADD COLUMN IF NOT EXISTS embedding vector(3072)",
 
     "DROP INDEX IF EXISTS material_chunks_embedding_idx",
+    # pgvector HNSW supports max 2 000 dims; 3 072-dim needs halfvec cast (pgvector 0.7+).
+    # Falls back gracefully — sequential scan is used if this fails.
     """
     CREATE INDEX material_chunks_embedding_idx
-    ON material_chunks USING hnsw (embedding vector_cosine_ops)
+    ON material_chunks USING hnsw ((embedding::halfvec(3072)) halfvec_cosine_ops)
     """,
 
     "SELECT 1",  
@@ -55,9 +57,10 @@ MIGRATIONS = [
     "SELECT 1",
 
     "DROP INDEX IF EXISTS paper_questions_embedding_idx",
+    # Same halfvec approach for paper_questions
     """
     CREATE INDEX paper_questions_embedding_idx
-    ON paper_questions USING hnsw (embedding vector_cosine_ops)
+    ON paper_questions USING hnsw ((embedding::halfvec(3072)) halfvec_cosine_ops)
     """,
 
 

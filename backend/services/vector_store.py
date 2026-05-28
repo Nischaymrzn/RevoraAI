@@ -1,9 +1,10 @@
 """
 Vector store using pgvector (PostgreSQL) + Gemini API embeddings.
 
-Embeddings (384 dims via gemini-embedding-001 with output_dimensionality=384)
-are stored directly in the material_chunks table. Similarity search uses
-cosine distance via pgvector's HNSW index — no local model, no PyTorch.
+Uses gemini-embedding-001 which natively outputs 3072-dimensional vectors.
+Embeddings are stored directly in the material_chunks table. Similarity
+search uses cosine distance via pgvector's HNSW index — no local model,
+no PyTorch.
 """
 
 from typing import List, Dict, Any, Optional
@@ -19,8 +20,8 @@ _EMBED_MODEL = "models/gemini-embedding-001"
 
 def embed_text(text: str, task_type: str = "retrieval_document") -> List[float]:
     """
-    Embed a single text using Gemini's supported embedding model.
-    Returns a list of EMBEDDING_DIMS (384) floats.
+    Embed a single text using Gemini gemini-embedding-001.
+    Returns a list of 3072 floats (EMBEDDING_DIMS).
 
     task_type: "retrieval_document" when indexing, "retrieval_query" when searching.
     """
@@ -28,7 +29,6 @@ def embed_text(text: str, task_type: str = "retrieval_document") -> List[float]:
         model=_EMBED_MODEL,
         content=text,
         task_type=task_type,
-        output_dimensionality=EMBEDDING_DIMS,
     )
     return result["embedding"]
 
