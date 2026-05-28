@@ -392,7 +392,6 @@ export default function Materials() {
 
   if (loading) return <MaterialsSkeleton />;
 
-  const completed  = materials.filter((m) => m.processing_status === 'completed').length;
   const inProgress = materials.filter((m) => ['pending', 'processing'].includes(m.processing_status)).length;
 
   return (

@@ -5,7 +5,6 @@ import {
   TrendingUp, AlertTriangle, ChevronRight, Plus,
 } from 'lucide-react';
 import { analyticsApi, materialsApi } from '../services/api';
-import { useAuthStore } from '../store/authStore';
 import { StudyMaterial } from '../types';
 import { Skeleton } from '../components/ui/skeleton';
 import { cn } from '../lib/utils';
@@ -66,7 +65,7 @@ function StatCard({ label, value, sub, icon: Icon }: {
 }
 
 export default function Dashboard() {
-  const { user } = useAuthStore();
+
   const [dashboard, setDashboard] = useState<any>(null);
   const [readiness, setReadiness] = useState<any>(null);
   const [materials, setMaterials] = useState<StudyMaterial[]>([]);
