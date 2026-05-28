@@ -28,15 +28,23 @@ def _log_activity(db: Session, user_id: int, event_type: str, description: str, 
 
 def _process_material(material_id: int, temp_filepath: str, file_type: str, db_url: str, user_id: int):
     """
-    Background task: extract text → chunk → embed each chunk via Google API
+    Background task: extract text → chunk → embed each chunk via Gemini API
     → store embeddings in PostgreSQL (pgvector).
     For past papers, also auto-extracts exam metadata (year, board, subject, grade).
     Temp file is deleted at the end regardless of success/failure.
+
+    Rate-limit safety:
+    - embed_text() retries automatically on 429 / quota errors (see vector_store.py)
+    - We commit in batches of 10 and pause 6 s between batches to stay comfortably
+      under Gemini's free-tier 100 QPM embedding limit without relying solely on retries.
     """
+    import time as _time
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
     from services.vector_store import embed_text
     from services.metadata_service import extract_paper_metadata
+
+    print(f"[process] starting material {material_id}", flush=True)
 
     engine = create_engine(db_url, pool_pre_ping=True)
     SessionLocal = sessionmaker(bind=engine)
@@ -45,20 +53,22 @@ def _process_material(material_id: int, temp_filepath: str, file_type: str, db_u
     try:
         material = db.query(models.StudyMaterial).filter(models.StudyMaterial.id == material_id).first()
         if not material:
+            print(f"[process] material {material_id} not found — aborting", flush=True)
             return
 
         material.processing_status = "processing"
         db.commit()
 
+        print(f"[process] extracting text ({file_type})…", flush=True)
         text, page_count = extract_text_from_file(temp_filepath, file_type)
         chunks = chunk_text(text, CHUNK_SIZE, CHUNK_OVERLAP)
         word_count = len(text.split())
+        print(f"[process] {len(chunks)} chunks | {word_count} words | {page_count} pages", flush=True)
 
         # Auto-extract metadata for past papers (and any material missing subject)
         if material.material_type == "past_paper" or not material.subject:
-            print(f"[INFO] Extracting metadata for material {material_id}...")
+            print(f"[process] extracting metadata…", flush=True)
             meta = extract_paper_metadata(text)
-            # Only update fields that are still null — don't overwrite user-set values
             if meta.get("exam_year") and not material.exam_year:
                 material.exam_year = meta["exam_year"]
             if meta.get("exam_board") and not material.exam_board:
@@ -67,25 +77,39 @@ def _process_material(material_id: int, temp_filepath: str, file_type: str, db_u
                 material.grade_level = meta["grade_level"]
             if meta.get("subject") and not material.subject:
                 material.subject = meta["subject"]
-            print(f"[INFO] Metadata: year={material.exam_year} board={material.exam_board} subject={material.subject}")
+            print(
+                f"[process] metadata → year={material.exam_year} "
+                f"board={material.exam_board} subject={material.subject}",
+                flush=True,
+            )
 
-        # Embed each chunk and store in DB with pgvector
+        # Embed each chunk and store in DB with pgvector.
+        # Commit every 10 chunks so partial progress is saved if something fails later.
+        # Sleep 6 s after each batch of 10 to stay under Gemini's 100 QPM free-tier cap;
+        # embed_text() also has its own retry logic for any 429 that still slips through.
+        total = len(chunks)
         for i, chunk in enumerate(chunks):
+            print(f"[process] embedding {i + 1}/{total}", flush=True)
             embedding = embed_text(chunk, task_type="retrieval_document")
-            c = models.MaterialChunk(
+            db.add(models.MaterialChunk(
                 material_id=material_id,
                 chunk_text=chunk,
                 chunk_index=i,
                 char_count=len(chunk),
                 embedding=embedding,
-            )
-            db.add(c)
+            ))
+            # Batch commit + rate-limit pause every 10 chunks
+            if (i + 1) % 10 == 0:
+                db.commit()
+                if i + 1 < total:  # no need to pause after the last batch
+                    _time.sleep(6)
 
         material.processing_status = "completed"
         material.page_count = page_count
-        material.chunk_count = len(chunks)
+        material.chunk_count = total
         material.word_count = word_count
         db.commit()
+        print(f"[process] material {material_id} → completed ✓", flush=True)
 
         # ── Question extraction (past papers only) ────────────────────────────
         # Extract individual questions and embed them for cross-paper clustering.
@@ -140,8 +164,8 @@ def _process_material(material_id: int, temp_filepath: str, file_type: str, db_u
 
     except Exception as e:
         import traceback
-        print(f"[ERROR] _process_material failed for material {material_id}: {e}")
-        traceback.print_exc()
+        print(f"[process] ERROR material {material_id}: {e}", flush=True)
+        traceback.print_exc(file=__import__("sys").stdout)  # goes to Render logs
         try:
             db.rollback()
             material = db.query(models.StudyMaterial).filter(models.StudyMaterial.id == material_id).first()
@@ -350,7 +374,9 @@ def generate_flashcards(
         raise HTTPException(status_code=400, detail="Material is still being processed")
 
     chunks = db.query(models.MaterialChunk).filter(models.MaterialChunk.material_id == material_id).all()
-    content = " ".join([c.chunk_text for c in chunks[:30]])[:8000]
+    # Keep content under ~1000 tokens so the full request stays below Groq's 6000 TPM cap
+    # (input ~1400 tokens + max_tokens 4096 = ~5500, safely under the limit)
+    content = " ".join([c.chunk_text for c in chunks[:15]])[:3500]
 
     prompt = f"""You are an expert study tool. Generate exactly {count} flashcards from the following study material.
 

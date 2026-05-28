@@ -7,6 +7,7 @@ search uses cosine distance via pgvector's HNSW index — no local model,
 no PyTorch.
 """
 
+import time
 from typing import List, Dict, Any, Optional
 import google.generativeai as genai
 from config import GEMINI_API_KEY, EMBEDDING_DIMS
@@ -24,13 +25,36 @@ def embed_text(text: str, task_type: str = "retrieval_document") -> List[float]:
     Returns a list of 3072 floats (EMBEDDING_DIMS).
 
     task_type: "retrieval_document" when indexing, "retrieval_query" when searching.
+
+    Retries up to 4 times with exponential back-off on rate-limit (429 / quota
+    exceeded) and transient server errors (503). Any other error is raised
+    immediately without retrying.
     """
-    result = genai.embed_content(
-        model=_EMBED_MODEL,
-        content=text,
-        task_type=task_type,
-    )
-    return result["embedding"]
+    _RETRYABLE = ("quota", "rate", "429", "resource exhausted", "503", "unavailable", "too many")
+    max_retries = 4
+
+    for attempt in range(max_retries):
+        try:
+            result = genai.embed_content(
+                model=_EMBED_MODEL,
+                content=text,
+                task_type=task_type,
+            )
+            return result["embedding"]
+        except Exception as exc:
+            err_lower = str(exc).lower()
+            is_retryable = any(k in err_lower for k in _RETRYABLE)
+            if is_retryable and attempt < max_retries - 1:
+                wait = 10 * (2 ** attempt)  # 10 s → 20 s → 40 s
+                print(
+                    f"[embed_text] rate-limit hit (attempt {attempt + 1}/{max_retries}), "
+                    f"retrying in {wait}s…",
+                    flush=True,
+                )
+                time.sleep(wait)
+                continue
+            print(f"[embed_text] failed (attempt {attempt + 1}/{max_retries}): {exc}", flush=True)
+            raise
 
 
 def search_chunks(

@@ -41,7 +41,7 @@ def generate_gemini(prompt: str, temperature: float = 0.7) -> str:
         raise RuntimeError("GEMINI_API_KEY not configured — cannot use Gemini for generation")
 
     last_err: Exception | None = None
-    for model_name in (GEMINI_MODEL, "gemini-1.5-flash"):
+    for model_name in (GEMINI_MODEL, "gemini-2.0-flash-lite", "gemini-1.5-flash-002"):
         try:
             model = genai.GenerativeModel(model_name)
             response = model.generate_content(
