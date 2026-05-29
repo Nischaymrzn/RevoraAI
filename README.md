@@ -1,8 +1,7 @@
-# Revora.ai — Project Documentation
+# Revora.ai
 
-> AI-powered exam revision and study support system for students.
+AI-powered exam revision and study support system for students.
 
----
 
 ## What is Revora?
 
